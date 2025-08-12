@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}Review Details - AI Code Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 bg-gradient-primary text-white">
+                <div class="card-body p-4">
+                    <h2 class="fw-bold mb-2"><i class="fas fa-file-alt me-3"></i>Analysis Report for Review #{{ review.id }}</h2>
+                    <p class="mb-0 opacity-75">
+                        Target: <code>{{ review.file_path or "Full Repository/PR" }}</code>
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-4">
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Summary</h5>
+                </div>
+                <div class="card-body">
+                    <div class="text-center">
+                        <div class="display-1 fw-bold">{{ review.overall_score }}</div>
+                        <p class="text-muted">Overall Score</p>
+                    </div>
+                    <hr>
+                    <p>{{ review.summary }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Issues Found ({{ issues|length }})</h5>
+                </div>
+                <div class="card-body">
+                    {% for issue in issues %}
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong>{{ issue.title }}</strong>
+                            <span class="badge bg-danger float-end">{{ issue.severity }}</span>
+                        </div>
+                        <div class="card-body">
+                            <p>{{ issue.description }}</p>
+                            <p><strong>File:</strong> <code>{{ issue.file_path }}</code>:{{ issue.line_number }}</p>
+                        </div>
+                    </div>
+                    {% else %}
+                    <div class="alert alert-success">
+                        No issues found in this review.
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

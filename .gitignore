@@ -1,0 +1,9 @@
+﻿__pycache__/
+*.pyc
+env/
+venv/
+.venv/
+my_env/
+logs/
+*.log
+.github_token

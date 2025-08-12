@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Compliance - AI Code Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="cr-card">
+        <div class="cr-card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0"><i class="fas fa-shield-alt me-2"></i>Security & Compliance</h5>
+          <button class="cr-btn cr-btn-secondary cr-btn-sm" onclick="loadCompliance()"><i class="fas fa-rotate me-1"></i>Refresh</button>
+        </div>
+        <div class="cr-card-body" id="complianceBody">
+          <div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin me-2"></i>Loading compliance report...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function loadCompliance(){
+  try{
+    const res = await fetch('/api/compliance/report');
+    const data = await res.json();
+    if (!data.success) throw new Error('Failed to load compliance');
+    renderCompliance(data.compliance);
+  }catch(e){
+    console.error(e); CodeReviewUI.showToast(e.message||'Error loading compliance','error');
+    document.getElementById('complianceBody').innerHTML = `<div class='alert alert-danger'>${e.message||'Error'}</div>`;
+  }
+}
+
+function renderCompliance(c){
+  const ok = b => b ? '<span class="cr-badge cr-badge-success">Compliant</span>' : '<span class="cr-badge cr-badge-danger">Non-Compliant</span>';
+  document.getElementById('complianceBody').innerHTML = `
+    <div class="row g-3">
+      <div class="col-md-3"><div class="card h-100"><div class="card-body"><h6>SOC 2</h6>${ok(c.soc2_compliant)}</div></div></div>
+      <div class="col-md-3"><div class="card h-100"><div class="card-body"><h6>HIPAA</h6>${ok(c.hipaa_compliant)}</div></div></div>
+      <div class="col-md-3"><div class="card h-100"><div class="card-body"><h6>GDPR</h6>${ok(c.gdpr_compliant)}</div></div></div>
+      <div class="col-md-3"><div class="card h-100"><div class="card-body"><h6>OWASP</h6><span class="cr-badge cr-badge-${c.owasp_compliant==='partial'?'warning':'success'}">${(c.owasp_compliant||'unknown').toUpperCase()}</span></div></div></div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header"><strong>Security Score</strong></div>
+      <div class="card-body"><div class="h3 mb-0">${c.security_score}</div><small class="text-muted">Last scan: ${new Date(c.last_scan).toLocaleString()}</small></div>
+    </div>
+    <div class="card mt-3">
+      <div class="card-header"><strong>Recommendations</strong></div>
+      <div class="card-body">${(c.recommendations||[]).map(r=>`<div class='d-flex align-items-start mb-2'><i class='fas fa-arrow-right me-2 mt-1'></i><span>${r}</span></div>`).join('')||'<span class="text-muted">No recommendations</span>'}</div>
+    </div>
+  `;
+}
+
+document.addEventListener('DOMContentLoaded', loadCompliance);
+</script>
+{% endblock %} 

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics - AI Code Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 bg-gradient-primary text-white">
+                <div class="card-body p-4">
+                    <h2 class="fw-bold mb-2">
+                        <i class="fas fa-chart-line me-3"></i>
+                        Analytics Dashboard
+                    </h2>
+                    <p class="mb-0 opacity-75">
+                        Advanced analytics and insights for your code review process.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-chart-bar me-2"></i>Code Quality Trends
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="qualityChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="fas fa-bug me-2"></i>Issues by Severity
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="issuesChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize charts placeholder
+        const ctx1 = document.getElementById('qualityChart');
+        const ctx2 = document.getElementById('issuesChart');
+        
+        if (ctx1) {
+            const chart1 = new Chart(ctx1, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Code Quality Score',
+                        data: [65, 70, 75, 80, 78, 85],
+                        borderColor: 'rgb(102, 126, 234)',
+                        backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                        tension: 0.4,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+        
+        if (ctx2) {
+            const chart2 = new Chart(ctx2, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Critical', 'High', 'Medium', 'Low'],
+                    datasets: [{
+                        data: [5, 15, 25, 35],
+                        backgroundColor: [
+                            '#dc3545',
+                            '#fd7e14', 
+                            '#ffc107',
+                            '#28a745'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+    });
+</script>
+{% endblock %} 

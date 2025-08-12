@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}Review History - AI Code Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 bg-gradient-primary text-white">
+                <div class="card-body p-4">
+                    <h2 class="fw-bold mb-2"><i class="fas fa-history me-3"></i>Analysis Review History</h2>
+                    <p class="mb-0 opacity-75">Browse and review the results of all completed AI analysis jobs.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Completed Reviews</h5>
+        </div>
+        <div class="card-body">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Review ID</th>
+                        <th>Type</th>
+                        <th>Target</th>
+                        <th>Score</th>
+                        <th>Status</th>
+                        <th>Date</th>
+                        <th>Details</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for review in reviews %}
+                    <tr>
+                        <td>{{ review.id }}</td>
+                        <td><span class="badge bg-secondary">{{ review.review_type }}</span></td>
+                        <td>
+                            {% if review.file_path %}
+                                <code>{{ review.file_path }}</code>
+                            {% elif review.pull_request_id %}
+                                PR #{{ review.pull_request_id }}
+                            {% else %}
+                                Repo ID: {{ review.repository_id }}
+                            {% endif %}
+                        </td>
+                        <td><span class="badge bg-primary rounded-pill">{{ review.overall_score }}</span></td>
+                        <td><span class="badge bg-success">{{ review.status }}</span></td>
+                        <td>{{ review.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                        <td>
+                            <a href="{{ url_for('review_details', review_id=review.id) }}" class="btn btn-sm btn-outline-primary me-2">
+                                <i class="fas fa-search me-1"></i> View Report
+                            </a>
+                            <button class="btn btn-sm btn-outline-success download-btn" data-review-id="{{ review.id }}">
+                                <i class="fas fa-download me-1"></i> Download
+                            </button>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-5">
+                            <i class="fas fa-box-open fa-2x mb-3"></i>
+                            <p>No reviews found. Run an analysis to see results here.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// Wait for DOM to load
+document.addEventListener('DOMContentLoaded', function() {
+    // Add event listeners to download buttons using event delegation
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.download-btn')) {
+            const button = e.target.closest('.download-btn');
+            const reviewId = button.getAttribute('data-review-id');
+            downloadReport(reviewId);
+        }
+    });
+});
+
+function downloadReport(reviewId) {
+    // Use fetch to download without navigation
+    fetch(`/api/reviews/${reviewId}/download`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Download failed');
+            }
+            return response.blob();
+        })
+        .then(blob => {
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `code-review-report-${reviewId}.html`;
+            
+            // Add to DOM, click, and remove
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            // Clean up
+            window.URL.revokeObjectURL(url);
+            
+            // Show success message
+            showToast('Report downloaded successfully!', 'success');
+        })
+        .catch(error => {
+            console.error('Download error:', error);
+            showToast('Download failed. Please try again.', 'error');
+        });
+}
+
+function showToast(message, type) {
+    // Create toast notification
+    const toast = document.createElement('div');
+    toast.className = `alert alert-${type === 'success' ? 'success' : 'danger'} position-fixed`;
+    toast.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 250px;';
+    toast.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'} me-2"></i>
+        ${message}
+    `;
+    
+    document.body.appendChild(toast);
+    
+    // Auto remove after 3 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 3000);
+}
+</script>
+
+{% endblock %} 

@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}PR Review - AI Code Review{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="cr-card">
+        <div class="cr-card-header">
+          <h5 class="mb-0"><i class="fas fa-code-branch me-2"></i>AI-Powered Pull Request Review</h5>
+        </div>
+        <div class="cr-card-body">
+          <div class="row g-3 align-items-end">
+            <div class="col-md-6">
+              <label class="cr-form-label">Pull Request URL</label>
+              <input type="url" id="prUrl" class="cr-form-control" placeholder="https://github.com/user/repo/pull/123">
+            </div>
+            <div class="col-md-3">
+              <label class="cr-form-label">Platform</label>
+              <select id="prPlatform" class="cr-form-control">
+                <option value="github">GitHub</option>
+                <option value="gitlab">GitLab</option>
+                <option value="bitbucket">Bitbucket</option>
+                <option value="azuredevops">Azure DevOps</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <button class="cr-btn cr-btn-primary w-100" onclick="analyzePR()"><i class="fas fa-search me-2"></i>Analyze PR</button>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="cr-form-label">Optional: Context/Notes</label>
+            <textarea id="prNotes" class="cr-form-control" rows="3" placeholder="Add any specific concerns or context for the AI reviewer"></textarea>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row" id="prResult" style="display:none;">
+    <div class="col-12">
+      <div class="cr-card">
+        <div class="cr-card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">PR Analysis Result</h5>
+          <button class="cr-btn cr-btn-secondary cr-btn-sm" onclick="exportPRResult()"><i class="fas fa-download me-1"></i>Export</button>
+        </div>
+        <div class="cr-card-body" id="prResultBody">
+          <!-- Results injected here -->
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function analyzePR() {
+  const url = document.getElementById('prUrl').value.trim();
+  const platform = document.getElementById('prPlatform').value;
+  const notes = document.getElementById('prNotes').value.trim();
+  if (!url) { CodeReviewUI.showToast('Please enter a PR URL', 'warning'); return; }
+
+  CodeReviewUI.showToast('Starting PR analysis...', 'info');
+  try {
+    const payload = { pr_url: url, notes };
+    const res = await fetch('/api/pr/analyze?platform=' + encodeURIComponent(platform), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.detail || 'PR analysis failed');
+    renderPRResult(data.analysis);
+    CodeReviewUI.showToast('PR analysis completed!', 'success');
+  } catch (e) {
+    console.error(e);
+    CodeReviewUI.showToast(e.message, 'error');
+  }
+}
+
+function renderPRResult(analysis) {
+  const container = document.getElementById('prResult');
+  const body = document.getElementById('prResultBody');
+  container.style.display = 'block';
+  const summary = analysis?.summary || 'Analysis complete. Review the key findings below.';
+  const findings = analysis?.findings || [];
+  body.innerHTML = `
+    <div class="mb-3">
+      <div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>${summary}</div>
+    </div>
+    <div class="row">
+      ${(findings.length ? findings : [{title:'No findings', severity:'low', detail:'No issues detected.'}]).map(f => `
+        <div class="col-md-6 mb-3">
+          <div class="card h-100 border-${severityToColor(f.severity)}">
+            <div class="card-header">
+              <strong>${escapeHtml(f.title || 'Finding')}</strong>
+              <span class="badge bg-${severityToColor(f.severity)} float-end">${(f.severity||'info').toUpperCase()}</span>
+            </div>
+            <div class="card-body">
+              <p>${escapeHtml(f.detail || '')}</p>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function exportPRResult() {
+  const html = document.getElementById('prResultBody').innerHTML;
+  const blob = new Blob([`<html><head><meta charset='utf-8'><title>PR Analysis</title></head><body>${html}</body></html>`], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'pr-analysis.html';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  CodeReviewUI.showToast('Exported PR analysis', 'success');
+}
+
+function severityToColor(s){ s=(s||'').toLowerCase(); if(s==='critical'||s==='high')return 'danger'; if(s==='medium')return 'warning'; if(s==='low')return 'success'; return 'info'; }
+function escapeHtml(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+</script>
+{% endblock %} 

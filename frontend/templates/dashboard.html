@@ -1,0 +1,645 @@
+{% extends "base.html" %}
+
+{% block page_title %}Dashboard{% endblock %}
+{% block page_description %}Overview of your code review activities and system metrics{% endblock %}
+
+{% block extra_css %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+    .metric-card {
+        background: linear-gradient(135deg, var(--cr-primary) 0%, var(--cr-primary-dark) 100%);
+        color: white;
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-lg);
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .metric-card::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        transform: rotate(45deg);
+    }
+    
+    .metric-card.success {
+        background: linear-gradient(135deg, var(--cr-success) 0%, #059669 100%);
+    }
+    
+    .metric-card.warning {
+        background: linear-gradient(135deg, var(--cr-warning) 0%, #d97706 100%);
+    }
+    
+    .metric-card.info {
+        background: linear-gradient(135deg, var(--cr-info) 0%, #0284c7 100%);
+    }
+    
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: var(--cr-spacing-xs);
+    }
+    
+    .metric-label {
+        font-size: var(--cr-font-size-sm);
+        opacity: 0.9;
+        font-weight: 500;
+    }
+    
+    .metric-icon {
+        position: absolute;
+        top: var(--cr-spacing-md);
+        right: var(--cr-spacing-md);
+        font-size: 2rem;
+        opacity: 0.3;
+    }
+    
+    .activity-item {
+        padding: var(--cr-spacing-md);
+        border-left: 3px solid var(--cr-gray-200);
+        margin-bottom: var(--cr-spacing-md);
+        background: white;
+        border-radius: 0 var(--cr-radius-md) var(--cr-radius-md) 0;
+        transition: var(--cr-transition);
+    }
+    
+    .activity-item:hover {
+        border-left-color: var(--cr-primary);
+        transform: translateX(3px);
+        box-shadow: var(--cr-shadow-sm);
+    }
+    
+    .activity-item.success {
+        border-left-color: var(--cr-success);
+    }
+    
+    .activity-item.warning {
+        border-left-color: var(--cr-warning);
+    }
+    
+    .activity-item.danger {
+        border-left-color: var(--cr-danger);
+    }
+    
+    .quick-action-card {
+        background: white;
+        border: 2px dashed var(--cr-gray-300);
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-xl);
+        text-align: center;
+        transition: var(--cr-transition);
+        cursor: pointer;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .quick-action-card:hover {
+        border-color: var(--cr-primary);
+        background: var(--cr-primary-light);
+        color: white;
+        transform: translateY(-2px);
+        box-shadow: var(--cr-shadow-lg);
+    }
+    
+    .quick-action-icon {
+        font-size: 3rem;
+        margin-bottom: var(--cr-spacing-md);
+        opacity: 0.7;
+    }
+    
+    .progress-ring {
+        transform: rotate(-90deg);
+    }
+    
+    .progress-ring-circle {
+        transition: stroke-dashoffset 0.35s;
+        transform-origin: 50% 50%;
+    }
+    
+    .system-status {
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-sm);
+        padding: var(--cr-spacing-sm) var(--cr-spacing-md);
+        border-radius: var(--cr-radius-md);
+        font-size: var(--cr-font-size-sm);
+        font-weight: 500;
+    }
+    
+    .system-status.operational {
+        background: var(--cr-success-bg);
+        color: var(--cr-success);
+    }
+    
+    .system-status.warning {
+        background: var(--cr-warning-bg);
+        color: var(--cr-warning);
+    }
+    
+    .chart-container {
+        position: relative;
+        height: 300px;
+        background: white;
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-lg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Welcome Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="cr-card">
+            <div class="cr-card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-8">
+                        <h2 class="h3 mb-2">Welcome back, {{ user.full_name or user.username }}! 👋</h2>
+                        <p class="text-muted mb-3">Here's what's happening with your code reviews today. Your AI assistant has analyzed <strong>{{ analytics.reviews.total }}</strong> files and identified <strong>{{ analytics.issues.total }}</strong> potential improvements.</p>
+                        <div class="d-flex gap-2">
+                            <a href="/code-analysis" class="cr-btn cr-btn-primary">
+                                <i class="fas fa-search"></i>
+                                Analyze New Code
+                            </a>
+                            <a href="/ai-assistant" class="cr-btn cr-btn-secondary">
+                                <i class="fas fa-robot"></i>
+                                Ask AI Assistant
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-md-4 text-center">
+                        <div class="system-status operational">
+                            <i class="fas fa-check-circle"></i>
+                            <span>All Systems Operational</span>
+                        </div>
+                        <div class="mt-3">
+                            <small class="text-muted">Last updated: <span id="last-updated">just now</span></small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Key Metrics -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="metric-card">
+            <div class="metric-icon">
+                <i class="fas fa-file-code"></i>
+            </div>
+            <div class="metric-value">{{ analytics.reviews.total }}</div>
+            <div class="metric-label">Files Reviewed</div>
+            <div class="mt-2">
+                <small style="opacity: 0.8;">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    +12% this week
+                </small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="metric-card success">
+            <div class="metric-icon">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            <div class="metric-value">{{ "%.0f"|format(analytics.reviews.average_score or 0) }}%</div>
+            <div class="metric-label">Average Quality Score</div>
+            <div class="mt-2">
+                <small style="opacity: 0.8;">
+                    <i class="fas fa-arrow-up me-1"></i>
+                    +5% improvement
+                </small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="metric-card warning">
+            <div class="metric-icon">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <div class="metric-value">{{ analytics.issues.total }}</div>
+            <div class="metric-label">Issues Identified</div>
+            <div class="mt-2">
+                <small style="opacity: 0.8;">
+                    <i class="fas fa-arrow-down me-1"></i>
+                    -8% from last week
+                </small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="metric-card info">
+            <div class="metric-icon">
+                <i class="fas fa-clock"></i>
+            </div>
+            <div class="metric-value">2.3m</div>
+            <div class="metric-label">Avg Review Time</div>
+            <div class="mt-2">
+                <small style="opacity: 0.8;">
+                    <i class="fas fa-arrow-down me-1"></i>
+                    -15% faster
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts and Analytics -->
+<div class="row mb-4">
+    <div class="col-md-8 mb-3">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0">Code Quality Trends</h5>
+                        <small class="text-muted">Quality scores over the past 30 days</small>
+                    </div>
+                    <div class="dropdown">
+                        <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            Last 30 days
+                        </button>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#">Last 7 days</a></li>
+                            <li><a class="dropdown-item" href="#">Last 30 days</a></li>
+                            <li><a class="dropdown-item" href="#">Last 90 days</a></li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            <div class="cr-card-body">
+                <div class="chart-container">
+                    <canvas id="qualityTrendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <h5 class="mb-0">Issue Distribution</h5>
+                <small class="text-muted">By severity level</small>
+            </div>
+            <div class="cr-card-body">
+                <div class="chart-container">
+                    <canvas id="issueDistributionChart"></canvas>
+                </div>
+                <div class="mt-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-danger rounded-circle" style="width: 8px; height: 8px;"></div>
+                            <small>Critical</small>
+                        </div>
+                        <span class="cr-badge cr-badge-danger">{{ analytics.issues.by_severity.critical or 0 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-warning rounded-circle" style="width: 8px; height: 8px;"></div>
+                            <small>High</small>
+                        </div>
+                        <span class="cr-badge cr-badge-warning">{{ analytics.issues.by_severity.high or 0 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-info rounded-circle" style="width: 8px; height: 8px;"></div>
+                            <small>Medium</small>
+                        </div>
+                        <span class="cr-badge cr-badge-info">{{ analytics.issues.by_severity.medium or 0 }}</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center gap-2">
+                            <div class="bg-success rounded-circle" style="width: 8px; height: 8px;"></div>
+                            <small>Low</small>
+                        </div>
+                        <span class="cr-badge cr-badge-success">{{ analytics.issues.by_severity.low or 0 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity and Quick Actions -->
+<div class="row mb-4">
+    <div class="col-md-8 mb-3">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0">Recent Activity</h5>
+                        <small class="text-muted">Latest code reviews and system events</small>
+                    </div>
+                    <a href="/reviews" class="cr-btn cr-btn-sm cr-btn-secondary">
+                        <i class="fas fa-history"></i>
+                        View All
+                    </a>
+                </div>
+            </div>
+            <div class="cr-card-body">
+                <div id="activity-feed">
+                    <div class="activity-item success">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-success rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fas fa-check text-white"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-medium">Code analysis completed</div>
+                                <div class="text-muted small">main.py analyzed with score 85/100</div>
+                                <div class="text-muted small">2 minutes ago</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="activity-item">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-primary rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fas fa-robot text-white"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-medium">AI Assistant query</div>
+                                <div class="text-muted small">Provided Python best practices guidance</div>
+                                <div class="text-muted small">15 minutes ago</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="activity-item warning">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-warning rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fas fa-exclamation-triangle text-white"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-medium">Security issue detected</div>
+                                <div class="text-muted small">Potential SQL injection in database.py</div>
+                                <div class="text-muted small">1 hour ago</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="activity-item">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-info rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fab fa-git-alt text-white"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="fw-medium">Repository connected</div>
+                                <div class="text-muted small">my-project repository synced successfully</div>
+                                <div class="text-muted small">3 hours ago</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-3">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <h5 class="mb-0">Quick Actions</h5>
+                <small class="text-muted">Common tasks and shortcuts</small>
+            </div>
+            <div class="cr-card-body">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="quick-action-card" onclick="window.location.href='/code-analysis'">
+                            <div class="quick-action-icon">
+                                <i class="fas fa-search"></i>
+                            </div>
+                            <div class="fw-medium">Analyze Code</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="quick-action-card" onclick="window.location.href='/repositories'">
+                            <div class="quick-action-icon">
+                                <i class="fab fa-git-alt"></i>
+                            </div>
+                            <div class="fw-medium">Connect Repo</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="quick-action-card" onclick="window.location.href='/ai-assistant'">
+                            <div class="quick-action-icon">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <div class="fw-medium">Ask AI</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="quick-action-card" onclick="window.location.href='/reviews'">
+                            <div class="quick-action-icon">
+                                <i class="fas fa-history"></i>
+                            </div>
+                            <div class="fw-medium">View History</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI Insights -->
+<div class="row">
+    <div class="col-12">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="d-flex align-items-center justify-content-center bg-primary rounded-circle" style="width: 40px; height: 40px;">
+                        <i class="fas fa-brain text-white"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0">AI Insights & Recommendations</h5>
+                        <small class="text-muted">Personalized suggestions based on your code patterns</small>
+                    </div>
+                </div>
+            </div>
+            <div class="cr-card-body">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-success rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fas fa-lightbulb text-white"></i>
+                            </div>
+                            <div>
+                                <div class="fw-medium text-success">Code Quality Improving</div>
+                                <div class="text-muted small">Your average code quality score has increased by 12% this month. Keep up the excellent work!</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-warning rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fas fa-shield-alt text-white"></i>
+                            </div>
+                            <div>
+                                <div class="fw-medium text-warning">Security Focus Needed</div>
+                                <div class="text-muted small">Consider adding input validation to your recent Python scripts to prevent security vulnerabilities.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <div class="d-flex align-items-center justify-content-center bg-info rounded-circle" style="width: 32px; height: 32px; min-width: 32px;">
+                                <i class="fas fa-rocket text-white"></i>
+                            </div>
+                            <div>
+                                <div class="fw-medium text-info">Performance Opportunity</div>
+                                <div class="text-muted small">Your database queries could be optimized. Consider using indexing for better performance.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize charts
+    initializeCharts();
+    
+    // Update timestamp
+    updateTimestamp();
+    setInterval(updateTimestamp, 60000); // Update every minute
+    
+    // Auto-refresh data every 5 minutes
+    setInterval(refreshDashboardData, 300000);
+});
+
+function initializeCharts() {
+    // Quality Trend Chart
+    const qualityCtx = document.getElementById('qualityTrendChart').getContext('2d');
+    new Chart(qualityCtx, {
+        type: 'line',
+        data: {
+            labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+            datasets: [{
+                label: 'Average Quality Score',
+                data: [72, 78, 81, 85],
+                borderColor: 'rgb(37, 99, 235)',
+                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 100,
+                    grid: {
+                        color: 'rgba(0, 0, 0, 0.1)'
+                    }
+                },
+                x: {
+                    grid: {
+                        display: false
+                    }
+                }
+            }
+        }
+    });
+    
+    // Issue Distribution Chart
+    const issueCtx = document.getElementById('issueDistributionChart').getContext('2d');
+    const issueData = [
+        parseInt('{{ analytics.issues.by_severity.critical or 0 }}'),
+        parseInt('{{ analytics.issues.by_severity.high or 0 }}'),
+        parseInt('{{ analytics.issues.by_severity.medium or 0 }}'),
+        parseInt('{{ analytics.issues.by_severity.low or 0 }}')
+    ];
+    new Chart(issueCtx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Critical', 'High', 'Medium', 'Low'],
+            datasets: [{
+                data: issueData,
+                backgroundColor: [
+                    '#ef4444',
+                    '#f59e0b',
+                    '#0ea5e9',
+                    '#10b981'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: false
+                }
+            }
+        }
+    });
+}
+
+function updateTimestamp() {
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    document.getElementById('last-updated').textContent = timeString;
+}
+
+function refreshDashboardData() {
+    // Fetch updated analytics data
+    fetch('/api/analytics/dashboard')
+        .then(response => response.json())
+        .then(data => {
+            // Update metrics if needed
+            console.log('Dashboard data refreshed:', data);
+            CodeReviewUI.showToast('Dashboard data updated', 'info', 2000);
+        })
+        .catch(error => {
+            console.error('Failed to refresh dashboard data:', error);
+        });
+}
+
+// Add keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+        switch(e.key) {
+            case '1':
+                e.preventDefault();
+                window.location.href = '/code-analysis';
+                break;
+            case '2':
+                e.preventDefault();
+                window.location.href = '/ai-assistant';
+                break;
+            case '3':
+                e.preventDefault();
+                window.location.href = '/repositories';
+                break;
+            case '4':
+                e.preventDefault();
+                window.location.href = '/reviews';
+                break;
+        }
+    }
+});
+</script>
+{% endblock %} 

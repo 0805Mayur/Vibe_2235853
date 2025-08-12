@@ -1,0 +1,984 @@
+{% extends "base.html" %}
+
+{% block page_title %}AI Assistant{% endblock %}
+{% block page_description %}Chat with your intelligent code review assistant for guidance and insights{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chat-container {
+        height: calc(100vh - 300px);
+        min-height: 600px;
+        display: flex;
+        flex-direction: column;
+        background: white;
+        border-radius: var(--cr-radius-lg);
+        border: 1px solid var(--cr-gray-200);
+        overflow: hidden;
+    }
+    
+    .chat-header {
+        background: linear-gradient(135deg, var(--cr-primary) 0%, var(--cr-primary-dark) 100%);
+        color: white;
+        padding: var(--cr-spacing-lg);
+        border-bottom: 1px solid var(--cr-primary-dark);
+    }
+    
+    .chat-status {
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-sm);
+        font-size: var(--cr-font-size-sm);
+        opacity: 0.9;
+        margin-top: var(--cr-spacing-xs);
+    }
+    
+    .status-indicator {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--cr-success);
+        animation: pulse 2s infinite;
+    }
+    
+    .chat-messages {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--cr-spacing-lg);
+        background: var(--cr-gray-50);
+    }
+    
+    .message {
+        display: flex;
+        margin-bottom: var(--cr-spacing-lg);
+        animation: fadeInUp 0.3s ease;
+    }
+    
+    .message.user {
+        justify-content: flex-end;
+    }
+    
+    .message-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--cr-font-size-sm);
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+    
+    .message.user .message-avatar {
+        background: var(--cr-secondary);
+        color: white;
+        margin-left: var(--cr-spacing-md);
+        order: 2;
+    }
+    
+    .message.assistant .message-avatar {
+        background: var(--cr-primary);
+        color: white;
+        margin-right: var(--cr-spacing-md);
+    }
+    
+    .message-content {
+        max-width: 70%;
+        position: relative;
+    }
+    
+    .message-bubble {
+        padding: var(--cr-spacing-md) var(--cr-spacing-lg);
+        border-radius: var(--cr-radius-lg);
+        position: relative;
+        word-wrap: break-word;
+        line-height: 1.5;
+    }
+    
+    .message.user .message-bubble {
+        background: var(--cr-primary);
+        color: white;
+        border-bottom-right-radius: var(--cr-radius-sm);
+    }
+    
+    .message.assistant .message-bubble {
+        background: white;
+        color: var(--cr-gray-800);
+        border: 1px solid var(--cr-gray-200);
+        border-bottom-left-radius: var(--cr-radius-sm);
+        box-shadow: var(--cr-shadow-sm);
+    }
+    
+    .message-bubble::before {
+        content: '';
+        position: absolute;
+        width: 0;
+        height: 0;
+        border-style: solid;
+    }
+    
+    .message.user .message-bubble::before {
+        bottom: 0;
+        right: -8px;
+        border-width: 8px 0 0 8px;
+        border-color: var(--cr-primary) transparent transparent transparent;
+    }
+    
+    .message.assistant .message-bubble::before {
+        bottom: 0;
+        left: -8px;
+        border-width: 8px 8px 0 0;
+        border-color: white transparent transparent transparent;
+    }
+    
+    .message-time {
+        font-size: var(--cr-font-size-xs);
+        color: var(--cr-gray-500);
+        margin-top: var(--cr-spacing-xs);
+        text-align: right;
+    }
+    
+    .message.assistant .message-time {
+        text-align: left;
+    }
+    
+    .typing-indicator {
+        display: flex;
+        align-items: center;
+        margin-bottom: var(--cr-spacing-lg);
+    }
+    
+    .typing-dots {
+        display: flex;
+        gap: 4px;
+        margin-left: var(--cr-spacing-md);
+    }
+    
+    .typing-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--cr-gray-400);
+        animation: typingDot 1.4s infinite;
+    }
+    
+    .typing-dot:nth-child(2) {
+        animation-delay: 0.2s;
+    }
+    
+    .typing-dot:nth-child(3) {
+        animation-delay: 0.4s;
+    }
+    
+    @keyframes typingDot {
+        0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: 0.4;
+        }
+        30% {
+            transform: translateY(-10px);
+            opacity: 1;
+        }
+    }
+    
+    .chat-input-container {
+        padding: var(--cr-spacing-lg);
+        background: white;
+        border-top: 1px solid var(--cr-gray-200);
+    }
+    
+    .chat-input-wrapper {
+        display: flex;
+        gap: var(--cr-spacing-md);
+        align-items: flex-end;
+    }
+    
+    .chat-input {
+        flex: 1;
+        background: var(--cr-gray-100);
+        border: 1px solid var(--cr-gray-300);
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-md) var(--cr-spacing-lg);
+        font-size: var(--cr-font-size-base);
+        resize: none;
+        min-height: 50px;
+        max-height: 120px;
+        transition: var(--cr-transition);
+        outline: none;
+    }
+    
+    .chat-input:focus {
+        border-color: var(--cr-primary);
+        background: white;
+        box-shadow: 0 0 0 3px rgb(37 99 235 / 0.1);
+    }
+    
+    .chat-send-btn {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: var(--cr-primary);
+        color: white;
+        border: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--cr-font-size-lg);
+        cursor: pointer;
+        transition: var(--cr-transition);
+        flex-shrink: 0;
+    }
+    
+    .chat-send-btn:hover:not(:disabled) {
+        background: var(--cr-primary-dark);
+        transform: scale(1.05);
+    }
+    
+    .chat-send-btn:disabled {
+        background: var(--cr-gray-300);
+        cursor: not-allowed;
+        transform: none;
+    }
+    
+    .quick-actions {
+        display: flex;
+        gap: var(--cr-spacing-sm);
+        margin-bottom: var(--cr-spacing-md);
+        flex-wrap: wrap;
+    }
+    
+    .quick-action-btn {
+        padding: var(--cr-spacing-xs) var(--cr-spacing-md);
+        background: var(--cr-gray-100);
+        border: 1px solid var(--cr-gray-300);
+        border-radius: var(--cr-radius-lg);
+        font-size: var(--cr-font-size-sm);
+        color: var(--cr-gray-700);
+        cursor: pointer;
+        transition: var(--cr-transition);
+        white-space: nowrap;
+    }
+    
+    .quick-action-btn:hover {
+        background: var(--cr-primary-light);
+        border-color: var(--cr-primary);
+        color: white;
+    }
+    
+    .code-block {
+        background: var(--cr-gray-900);
+        color: var(--cr-gray-100);
+        padding: var(--cr-spacing-md);
+        border-radius: var(--cr-radius-md);
+        font-family: var(--cr-font-mono);
+        font-size: var(--cr-font-size-sm);
+        overflow-x: auto;
+        margin: var(--cr-spacing-md) 0;
+        position: relative;
+    }
+    
+    .code-block-header {
+        display: flex;
+        align-items: center;
+        justify-content: between;
+        margin-bottom: var(--cr-spacing-sm);
+        padding-bottom: var(--cr-spacing-sm);
+        border-bottom: 1px solid var(--cr-gray-700);
+    }
+    
+    .code-block-lang {
+        font-size: var(--cr-font-size-xs);
+        color: var(--cr-gray-400);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .code-copy-btn {
+        position: absolute;
+        top: var(--cr-spacing-sm);
+        right: var(--cr-spacing-sm);
+        background: var(--cr-gray-700);
+        color: var(--cr-gray-300);
+        border: none;
+        padding: var(--cr-spacing-xs);
+        border-radius: var(--cr-radius-sm);
+        cursor: pointer;
+        font-size: var(--cr-font-size-xs);
+        transition: var(--cr-transition);
+    }
+    
+    .code-copy-btn:hover {
+        background: var(--cr-gray-600);
+        color: white;
+    }
+    
+    .suggestion-card {
+        background: var(--cr-info-bg);
+        border: 1px solid var(--cr-info);
+        border-radius: var(--cr-radius-md);
+        padding: var(--cr-spacing-md);
+        margin: var(--cr-spacing-md) 0;
+    }
+    
+    .suggestion-header {
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-sm);
+        margin-bottom: var(--cr-spacing-sm);
+        color: var(--cr-info);
+        font-weight: 600;
+    }
+    
+    .welcome-message {
+        text-align: center;
+        padding: var(--cr-spacing-2xl);
+        color: var(--cr-gray-600);
+    }
+    
+    .welcome-icon {
+        font-size: 4rem;
+        color: var(--cr-primary);
+        margin-bottom: var(--cr-spacing-lg);
+    }
+    
+    .feature-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: var(--cr-spacing-lg);
+        margin-top: var(--cr-spacing-xl);
+    }
+    
+    .feature-card {
+        background: white;
+        border: 1px solid var(--cr-gray-200);
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-lg);
+        text-align: center;
+        transition: var(--cr-transition);
+    }
+    
+    .feature-card:hover {
+        box-shadow: var(--cr-shadow-md);
+        transform: translateY(-2px);
+    }
+    
+    .feature-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: var(--cr-primary-light);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.5rem;
+        margin: 0 auto var(--cr-spacing-md);
+    }
+    
+    .feature-title {
+        font-weight: 600;
+        margin-bottom: var(--cr-spacing-sm);
+        color: var(--cr-gray-800);
+    }
+    
+    .feature-description {
+        color: var(--cr-gray-600);
+        font-size: var(--cr-font-size-sm);
+        line-height: 1.5;
+    }
+    
+    .analysis-integration {
+        background: linear-gradient(135deg, var(--cr-success-bg) 0%, var(--cr-info-bg) 100%);
+        border: 1px solid var(--cr-success);
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-lg);
+        margin: var(--cr-spacing-md) 0;
+    }
+    
+    .analysis-header {
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-md);
+        margin-bottom: var(--cr-spacing-md);
+    }
+    
+    .analysis-icon {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--cr-success);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .analysis-details {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+        gap: var(--cr-spacing-md);
+        margin-top: var(--cr-spacing-md);
+    }
+    
+    .analysis-metric {
+        text-align: center;
+        padding: var(--cr-spacing-sm);
+        background: white;
+        border-radius: var(--cr-radius-md);
+        border: 1px solid var(--cr-gray-200);
+    }
+    
+    .metric-value {
+        font-size: var(--cr-font-size-lg);
+        font-weight: 700;
+        color: var(--cr-gray-800);
+    }
+    
+    .metric-label {
+        font-size: var(--cr-font-size-xs);
+        color: var(--cr-gray-600);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-top: var(--cr-spacing-xs);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="chat-container">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h4 class="mb-0">
+                            <i class="fas fa-robot me-2"></i>
+                            AI Code Review Assistant
+                        </h4>
+                        <div class="chat-status">
+                            <div class="status-indicator"></div>
+                            <span>Online and ready to help</span>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="clearChat()" title="Clear conversation">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                        <button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="exportChat()" title="Export chat">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Chat Messages -->
+            <div class="chat-messages" id="chatMessages">
+                <!-- Welcome Message -->
+                <div class="welcome-message" id="welcomeMessage">
+                    <div class="welcome-icon">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <h3>Welcome to your AI Code Review Assistant!</h3>
+                    <p class="mb-4">I'm here to help you with code analysis, best practices, security reviews, and performance optimization. Ask me anything about your code!</p>
+                    
+                    <div class="feature-grid">
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-shield-alt"></i>
+                            </div>
+                            <div class="feature-title">Security Analysis</div>
+                            <div class="feature-description">Identify vulnerabilities, security flaws, and potential attack vectors in your code</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-tachometer-alt"></i>
+                            </div>
+                            <div class="feature-title">Performance Review</div>
+                            <div class="feature-description">Optimize algorithms, improve efficiency, and eliminate performance bottlenecks</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-code"></i>
+                            </div>
+                            <div class="feature-title">Code Quality</div>
+                            <div class="feature-description">Improve readability, maintainability, and adherence to best practices</div>
+                        </div>
+                        <div class="feature-card">
+                            <div class="feature-icon">
+                                <i class="fas fa-sitemap"></i>
+                            </div>
+                            <div class="feature-title">Architecture Guidance</div>
+                            <div class="feature-description">Design patterns, scalability advice, and architectural recommendations</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Messages will be dynamically added here -->
+            </div>
+            
+            <!-- Typing Indicator -->
+            <div class="typing-indicator" id="typingIndicator" style="display: none;">
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+            
+            <!-- Chat Input -->
+            <div class="chat-input-container">
+                <!-- Quick Actions -->
+                <div class="quick-actions">
+                    <button class="quick-action-btn" onclick="sendQuickMessage('How can I improve my Python code?')">
+                        <i class="fab fa-python me-1"></i>Python Tips
+                    </button>
+                    <button class="quick-action-btn" onclick="sendQuickMessage('What security issues should I look for?')">
+                        <i class="fas fa-shield-alt me-1"></i>Security Check
+                    </button>
+                    <button class="quick-action-btn" onclick="sendQuickMessage('How can I optimize performance?')">
+                        <i class="fas fa-rocket me-1"></i>Performance
+                    </button>
+                    <button class="quick-action-btn" onclick="sendQuickMessage('Show me best practices')">
+                        <i class="fas fa-star me-1"></i>Best Practices
+                    </button>
+                    <button class="quick-action-btn" onclick="analyzeCodeInChat()">
+                        <i class="fas fa-search me-1"></i>Analyze Code
+                    </button>
+                </div>
+                
+                <!-- Input Field -->
+                <div class="chat-input-wrapper">
+                    <textarea 
+                        class="chat-input" 
+                        id="messageInput" 
+                        placeholder="Ask me anything about code review, security, performance, or best practices..."
+                        rows="1"
+                        onkeydown="handleKeyDown(event)"
+                        oninput="adjustTextareaHeight(this)"
+                    ></textarea>
+                    <button class="chat-send-btn" id="sendButton" onclick="sendMessage()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let chatHistory = [];
+let isTyping = false;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Focus on input
+    document.getElementById('messageInput').focus();
+    
+    // Load chat history from localStorage
+    loadChatHistory();
+});
+
+function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+function adjustTextareaHeight(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+}
+
+function sendQuickMessage(message) {
+    document.getElementById('messageInput').value = message;
+    sendMessage();
+}
+
+function sendMessage() {
+    const input = document.getElementById('messageInput');
+    const message = input.value.trim();
+    
+    if (!message || isTyping) return;
+    
+    // Clear input
+    input.value = '';
+    input.style.height = 'auto';
+    
+    // Hide welcome message
+    hideWelcomeMessage();
+    
+    // Add user message
+    addMessage(message, 'user');
+    
+    // Show typing indicator
+    showTypingIndicator();
+    
+    // Send to API
+    fetch('/api/ai-assistant/chat', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            message: message,
+            history: chatHistory
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideTypingIndicator();
+        
+        if (data.error) {
+            addMessage('Sorry, I encountered an error. Please try again later.', 'assistant', true);
+        } else {
+            addMessage(data.response, 'assistant');
+        }
+    })
+    .catch(error => {
+        console.error('Chat error:', error);
+        hideTypingIndicator();
+        addMessage('Sorry, there was an error connecting to the AI Assistant. Please check your connection and try again.', 'assistant', true);
+    });
+}
+
+function addMessage(content, sender, isError = false) {
+    const messagesContainer = document.getElementById('chatMessages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+    
+    const now = new Date();
+    const timeString = now.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+    
+    const avatar = sender === 'user' ? 
+        `<div class="message-avatar">${'{{ user.username[0].upper() if user and user.username else "U" }}'}</div>` :
+        `<div class="message-avatar"><i class="fas fa-robot"></i></div>`;
+    
+    const processedContent = processMessageContent(content);
+    
+    messageDiv.innerHTML = `
+        ${avatar}
+        <div class="message-content">
+            <div class="message-bubble ${isError ? 'error' : ''}">${processedContent}</div>
+            <div class="message-time">${timeString}</div>
+        </div>
+    `;
+    
+    messagesContainer.appendChild(messageDiv);
+    scrollToBottom();
+    
+    // Add to chat history
+    chatHistory.push({
+        role: sender === 'user' ? 'user' : 'assistant',
+        content: content,
+        timestamp: now.toISOString()
+    });
+    
+    // Save to localStorage
+    saveChatHistory();
+}
+
+function processMessageContent(content) {
+    // Process code blocks
+    content = content.replace(/```(\w+)?\n([\s\S]*?)```/g, (match, lang, code) => {
+        const language = lang || 'text';
+        return `
+            <div class="code-block">
+                <div class="code-block-header">
+                    <span class="code-block-lang">${language}</span>
+                </div>
+                <button class="code-copy-btn" onclick="copyCode(this)" title="Copy code">
+                    <i class="fas fa-copy"></i>
+                </button>
+                <pre><code>${escapeHtml(code.trim())}</code></pre>
+            </div>
+        `;
+    });
+    
+    // Process inline code
+    content = content.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>');
+    
+    // Process bold text
+    content = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Process bullet points
+    content = content.replace(/^• (.+)$/gm, '<div class="bullet-point">• $1</div>');
+    
+    // Process line breaks
+    content = content.replace(/\n/g, '<br>');
+    
+    return content;
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function copyCode(button) {
+    const codeBlock = button.nextElementSibling.textContent;
+    CodeReviewUI.copyToClipboard(codeBlock);
+    
+    // Update button temporarily
+    const originalIcon = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-check"></i>';
+    setTimeout(() => {
+        button.innerHTML = originalIcon;
+    }, 2000);
+}
+
+function showTypingIndicator() {
+    isTyping = true;
+    document.getElementById('typingIndicator').style.display = 'flex';
+    document.getElementById('sendButton').disabled = true;
+    scrollToBottom();
+}
+
+function hideTypingIndicator() {
+    isTyping = false;
+    document.getElementById('typingIndicator').style.display = 'none';
+    document.getElementById('sendButton').disabled = false;
+}
+
+function hideWelcomeMessage() {
+    const welcomeMessage = document.getElementById('welcomeMessage');
+    if (welcomeMessage) {
+        welcomeMessage.style.display = 'none';
+    }
+}
+
+function scrollToBottom() {
+    const messagesContainer = document.getElementById('chatMessages');
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function clearChat() {
+    if (confirm('Are you sure you want to clear the conversation?')) {
+        chatHistory = [];
+        const messagesContainer = document.getElementById('chatMessages');
+        messagesContainer.innerHTML = '';
+        
+        // Show welcome message again
+        location.reload();
+    }
+}
+
+function exportChat() {
+    if (chatHistory.length === 0) {
+        CodeReviewUI.showToast('No conversation to export', 'info');
+        return;
+    }
+    
+    const chatData = {
+        timestamp: new Date().toISOString(),
+        messages: chatHistory
+    };
+    
+    const blob = new Blob([JSON.stringify(chatData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ai-chat-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    CodeReviewUI.showToast('Chat exported successfully!', 'success');
+}
+
+function saveChatHistory() {
+    try {
+        localStorage.setItem('ai-chat-history', JSON.stringify(chatHistory));
+    } catch (error) {
+        console.error('Failed to save chat history:', error);
+    }
+}
+
+function loadChatHistory() {
+    try {
+        const saved = localStorage.getItem('ai-chat-history');
+        if (saved) {
+            chatHistory = JSON.parse(saved);
+            
+            // Restore messages (limit to last 20 for performance)
+            const recentHistory = chatHistory.slice(-20);
+            chatHistory = recentHistory;
+            
+            if (recentHistory.length > 0) {
+                hideWelcomeMessage();
+                
+                recentHistory.forEach(msg => {
+                    const messagesContainer = document.getElementById('chatMessages');
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${msg.role === 'user' ? 'user' : 'assistant'}`;
+                    
+                    const time = new Date(msg.timestamp);
+                    const timeString = time.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                    
+                    const avatar = msg.role === 'user' ? 
+                        `<div class="message-avatar">${'{{ user.username[0].upper() if user and user.username else "U" }}'}</div>` :
+                        `<div class="message-avatar"><i class="fas fa-robot"></i></div>`;
+                    
+                    const processedContent = processMessageContent(msg.content);
+                    
+                    messageDiv.innerHTML = `
+                        ${avatar}
+                        <div class="message-content">
+                            <div class="message-bubble">${processedContent}</div>
+                            <div class="message-time">${timeString}</div>
+                        </div>
+                    `;
+                    
+                    messagesContainer.appendChild(messageDiv);
+                });
+                
+                scrollToBottom();
+            }
+        }
+    } catch (error) {
+        console.error('Failed to load chat history:', error);
+        chatHistory = [];
+    }
+}
+
+function analyzeCodeInChat() {
+    const message = `I'd like to analyze some code. Can you help me with a comprehensive review including security, performance, and best practices?
+
+Here's my code:
+
+\`\`\`python
+# Paste your code here
+def example_function():
+    pass
+\`\`\`
+
+Please provide detailed feedback and suggestions for improvement.`;
+    
+    document.getElementById('messageInput').value = message;
+    
+    // Focus and position cursor at the code section
+    const textarea = document.getElementById('messageInput');
+    textarea.focus();
+    const codeStart = message.indexOf('# Paste your code here');
+    textarea.setSelectionRange(codeStart, codeStart + 22);
+    
+    adjustTextareaHeight(textarea);
+}
+
+// Integration with code analysis results
+function displayAnalysisResultsInChat(review, issues) {
+    if (!review) return;
+    
+    hideTypingIndicator();
+    
+    const analysisMessage = `I've completed the analysis of your code! Here are the results:
+
+**Overall Score: ${review.overall_score || 0}/100**
+
+${review.summary || 'Analysis completed successfully.'}
+
+${issues && issues.length > 0 ? `
+**Issues Found (${issues.length}):**
+
+${issues.slice(0, 5).map(issue => `
+• **${issue.severity.toUpperCase()}**: ${issue.title}
+  ${issue.description}
+  ${issue.line_number ? `(Line ${issue.line_number})` : ''}
+`).join('\n')}
+
+${issues.length > 5 ? `\n*And ${issues.length - 5} more issues. Check the Code Analysis page for complete details.*` : ''}
+` : '\n✅ **Great news!** No significant issues were found in your code.'}
+
+Would you like me to explain any of these findings in more detail?`;
+
+    addMessage(analysisMessage, 'assistant');
+    
+    // Add analysis integration card
+    setTimeout(() => {
+        const messagesContainer = document.getElementById('chatMessages');
+        const integrationDiv = document.createElement('div');
+        integrationDiv.className = 'analysis-integration';
+        integrationDiv.innerHTML = `
+            <div class="analysis-header">
+                <div class="analysis-icon">
+                    <i class="fas fa-chart-line"></i>
+                </div>
+                <div>
+                    <h6 class="mb-1">Code Analysis Complete</h6>
+                    <small class="text-muted">View detailed results in the Code Analysis page</small>
+                </div>
+            </div>
+            <div class="analysis-details">
+                <div class="analysis-metric">
+                    <div class="metric-value">${Math.round(review.overall_score || 0)}</div>
+                    <div class="metric-label">Overall Score</div>
+                </div>
+                <div class="analysis-metric">
+                    <div class="metric-value">${issues ? issues.length : 0}</div>
+                    <div class="metric-label">Issues Found</div>
+                </div>
+                <div class="analysis-metric">
+                    <div class="metric-value">${issues ? issues.filter(i => i.severity === 'high' || i.severity === 'critical').length : 0}</div>
+                    <div class="metric-label">High Priority</div>
+                </div>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(integrationDiv);
+        scrollToBottom();
+    }, 500);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+        switch(e.key) {
+            case 'k':
+                e.preventDefault();
+                clearChat();
+                break;
+            case 'e':
+                e.preventDefault();
+                exportChat();
+                break;
+        }
+    }
+});
+
+// Auto-save draft message
+let draftTimeout;
+document.getElementById('messageInput').addEventListener('input', function() {
+    clearTimeout(draftTimeout);
+    draftTimeout = setTimeout(() => {
+        localStorage.setItem('ai-chat-draft', this.value);
+    }, 500);
+});
+
+// Load draft message
+document.addEventListener('DOMContentLoaded', function() {
+    const draft = localStorage.getItem('ai-chat-draft');
+    if (draft) {
+        document.getElementById('messageInput').value = draft;
+        adjustTextareaHeight(document.getElementById('messageInput'));
+    }
+});
+
+// Clear draft when message is sent
+function clearDraft() {
+    localStorage.removeItem('ai-chat-draft');
+}
+</script>
+{% endblock %} 

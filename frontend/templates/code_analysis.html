@@ -1,0 +1,1702 @@
+{% extends "base.html" %}
+
+{% block page_title %}Code Analysis{% endblock %}
+{% block page_description %}Upload and analyze your code with AI-powered insights and recommendations{% endblock %}
+
+{% block extra_css %}
+<style>
+    .code-editor-container {
+        background: var(--cr-gray-900);
+        border-radius: var(--cr-radius-lg);
+        border: 1px solid var(--cr-gray-700);
+        overflow: hidden;
+    }
+    
+    .code-editor-header {
+        background: var(--cr-gray-800);
+        padding: var(--cr-spacing-md);
+        border-bottom: 1px solid var(--cr-gray-700);
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-md);
+    }
+    
+    .code-editor-tabs {
+        display: flex;
+        gap: var(--cr-spacing-xs);
+    }
+    
+    .code-editor-tab {
+        padding: var(--cr-spacing-xs) var(--cr-spacing-md);
+        background: var(--cr-gray-700);
+        color: var(--cr-gray-300);
+        border-radius: var(--cr-radius-sm);
+        font-size: var(--cr-font-size-sm);
+        font-family: var(--cr-font-mono);
+        cursor: pointer;
+        transition: var(--cr-transition);
+    }
+    
+    .code-editor-tab.active {
+        background: var(--cr-primary);
+        color: white;
+    }
+    
+    .code-editor-actions {
+        margin-left: auto;
+        display: flex;
+        gap: var(--cr-spacing-sm);
+    }
+    
+    .code-editor-textarea {
+        width: 100%;
+        min-height: 400px;
+        background: var(--cr-gray-900);
+        color: var(--cr-gray-100);
+        border: none;
+        padding: var(--cr-spacing-lg);
+        font-family: var(--cr-font-mono);
+        font-size: var(--cr-font-size-sm);
+        line-height: 1.6;
+        resize: vertical;
+        outline: none;
+    }
+    
+    .code-editor-textarea::placeholder {
+        color: var(--cr-gray-500);
+    }
+    
+    .file-upload-zone {
+        border: 2px dashed var(--cr-gray-300);
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-2xl) var(--cr-spacing-lg);
+        text-align: center;
+        background: var(--cr-gray-50);
+        transition: var(--cr-transition);
+        cursor: pointer;
+    }
+    
+    .file-upload-zone:hover,
+    .file-upload-zone.dragover {
+        border-color: var(--cr-primary);
+        background: var(--cr-primary-light);
+        color: white;
+    }
+    
+    .file-upload-icon {
+        font-size: 3rem;
+        color: var(--cr-gray-400);
+        margin-bottom: var(--cr-spacing-md);
+    }
+    
+    .file-upload-zone:hover .file-upload-icon,
+    .file-upload-zone.dragover .file-upload-icon {
+        color: white;
+    }
+    
+    .analysis-progress {
+        background: white;
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-lg);
+        border: 1px solid var(--cr-gray-200);
+    }
+    
+    .progress-step {
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-md);
+        padding: var(--cr-spacing-md) 0;
+        border-bottom: 1px solid var(--cr-gray-100);
+    }
+    
+    .progress-step:last-child {
+        border-bottom: none;
+    }
+    
+    .progress-step-icon {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: var(--cr-font-size-sm);
+        font-weight: 600;
+    }
+    
+    .progress-step.pending .progress-step-icon {
+        background: var(--cr-gray-200);
+        color: var(--cr-gray-500);
+    }
+    
+    .progress-step.active .progress-step-icon {
+        background: var(--cr-primary);
+        color: white;
+        animation: pulse 2s infinite;
+    }
+    
+    .progress-step.completed .progress-step-icon {
+        background: var(--cr-success);
+        color: white;
+    }
+    
+    .progress-step.failed .progress-step-icon {
+        background: var(--cr-danger);
+        color: white;
+    }
+    
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+    
+    .analysis-results {
+        display: none;
+    }
+    
+    .analysis-results.show {
+        display: block;
+        animation: fadeInUp 0.5s ease;
+    }
+    
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    .score-circle {
+        width: 120px;
+        height: 120px;
+        position: relative;
+        margin: 0 auto;
+    }
+    
+    .score-circle svg {
+        transform: rotate(-90deg);
+    }
+    
+    .score-circle-bg {
+        fill: none;
+        stroke: var(--cr-gray-200);
+        stroke-width: 8;
+    }
+    
+    .score-circle-progress {
+        fill: none;
+        stroke-width: 8;
+        stroke-linecap: round;
+        transition: stroke-dashoffset 1s ease;
+    }
+    
+    .score-text {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        text-align: center;
+    }
+    
+    .score-value {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--cr-gray-800);
+    }
+    
+    .score-label {
+        font-size: var(--cr-font-size-sm);
+        color: var(--cr-gray-600);
+        margin-top: -0.25rem;
+    }
+    
+    .issue-item {
+        background: white;
+        border-radius: var(--cr-radius-md);
+        border: 1px solid var(--cr-gray-200);
+        padding: var(--cr-spacing-md);
+        margin-bottom: var(--cr-spacing-md);
+        transition: var(--cr-transition);
+    }
+    
+    .issue-item:hover {
+        box-shadow: var(--cr-shadow-md);
+        transform: translateY(-1px);
+    }
+    
+    .issue-header {
+        display: flex;
+        align-items: flex-start;
+        gap: var(--cr-spacing-md);
+        margin-bottom: var(--cr-spacing-sm);
+    }
+    
+    .issue-severity {
+        padding: var(--cr-spacing-xs) var(--cr-spacing-sm);
+        border-radius: var(--cr-radius-sm);
+        font-size: var(--cr-font-size-xs);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .issue-severity.critical {
+        background: var(--cr-danger-bg);
+        color: var(--cr-danger);
+    }
+    
+    .issue-severity.high {
+        background: var(--cr-warning-bg);
+        color: var(--cr-warning);
+    }
+    
+    .issue-severity.medium {
+        background: var(--cr-info-bg);
+        color: var(--cr-info);
+    }
+    
+    .issue-severity.low {
+        background: var(--cr-success-bg);
+        color: var(--cr-success);
+    }
+    
+    .issue-title {
+        font-weight: 600;
+        color: var(--cr-gray-800);
+        margin-bottom: var(--cr-spacing-xs);
+    }
+    
+    .issue-description {
+        color: var(--cr-gray-600);
+        font-size: var(--cr-font-size-sm);
+        line-height: 1.5;
+    }
+    
+    .issue-location {
+        display: flex;
+        align-items: center;
+        gap: var(--cr-spacing-sm);
+        margin-top: var(--cr-spacing-sm);
+        padding-top: var(--cr-spacing-sm);
+        border-top: 1px solid var(--cr-gray-100);
+        font-size: var(--cr-font-size-sm);
+        color: var(--cr-gray-500);
+    }
+    
+    .code-snippet {
+        background: var(--cr-gray-900);
+        color: var(--cr-gray-100);
+        padding: var(--cr-spacing-md);
+        border-radius: var(--cr-radius-md);
+        font-family: var(--cr-font-mono);
+        font-size: var(--cr-font-size-sm);
+        overflow-x: auto;
+        margin-top: var(--cr-spacing-sm);
+        border-left: 4px solid var(--cr-primary);
+    }
+    
+    .analysis-summary-card {
+        background: linear-gradient(135deg, var(--cr-primary) 0%, var(--cr-primary-dark) 100%);
+        color: white;
+        border-radius: var(--cr-radius-lg);
+        padding: var(--cr-spacing-xl);
+        text-align: center;
+        margin-bottom: var(--cr-spacing-lg);
+    }
+    
+    .language-selector {
+        display: flex;
+        gap: var(--cr-spacing-sm);
+        margin-bottom: var(--cr-spacing-md);
+    }
+    
+    .language-btn {
+        padding: var(--cr-spacing-xs) var(--cr-spacing-md);
+        border: 1px solid var(--cr-gray-300);
+        background: white;
+        color: var(--cr-gray-700);
+        border-radius: var(--cr-radius-md);
+        font-size: var(--cr-font-size-sm);
+        cursor: pointer;
+        transition: var(--cr-transition);
+    }
+    
+    .language-btn:hover {
+        border-color: var(--cr-primary);
+        color: var(--cr-primary);
+    }
+    
+    .language-btn.active {
+        background: var(--cr-primary);
+        border-color: var(--cr-primary);
+        color: white;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Analysis Input Section -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0">Code Input</h5>
+                        <small class="text-muted">Upload a file or paste your code for AI analysis</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="clearCode()">
+                            <i class="fas fa-trash"></i>
+                            Clear
+                        </button>
+                        <button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="formatCode()">
+                            <i class="fas fa-code"></i>
+                            Format
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="cr-card-body">
+                <!-- Language Selector -->
+                <div class="language-selector">
+                    <button class="language-btn active" data-lang="python">Python</button>
+                    <button class="language-btn" data-lang="javascript">JavaScript</button>
+                    <button class="language-btn" data-lang="java">Java</button>
+                    <button class="language-btn" data-lang="typescript">TypeScript</button>
+                    <button class="language-btn" data-lang="cpp">C++</button>
+                    <button class="language-btn" data-lang="csharp">C#</button>
+                    <button class="language-btn" data-lang="go">Go</button>
+                    <button class="language-btn" data-lang="rust">Rust</button>
+                </div>
+                
+                <!-- File Upload Zone -->
+                <div class="file-upload-zone" id="fileUploadZone" onclick="document.getElementById('fileInput').click()">
+                    <div class="file-upload-icon">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                    </div>
+                    <h6 class="fw-bold mb-2">Drop your code file here or click to browse</h6>
+                    <p class="text-muted mb-0">Supports .py, .js, .java, .ts, .cpp, .cs, .go, .rs and more</p>
+                    <input type="file" id="fileInput" class="d-none" accept=".py,.js,.java,.ts,.jsx,.tsx,.cpp,.c,.cs,.go,.rs,.php,.rb,.swift,.kt,.scala,.r,.m,.pl,.sh,.sql,.html,.css,.vue" onchange="handleFileUpload(this)">
+                </div>
+                
+                <div class="text-center my-3">
+                    <span class="text-muted">or</span>
+                </div>
+                
+                <!-- Code Editor -->
+                <div class="code-editor-container">
+                    <div class="code-editor-header">
+                        <div class="code-editor-tabs">
+                            <div class="code-editor-tab active" id="currentTab">
+                                <i class="fab fa-python me-1"></i>
+                                <span id="currentFileName">main.py</span>
+                            </div>
+                        </div>
+                        <div class="code-editor-actions">
+                            <button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="copyCode()" title="Copy code">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                            <button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="toggleFullscreen()" title="Fullscreen">
+                                <i class="fas fa-expand"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <textarea 
+                        class="code-editor-textarea" 
+                        id="codeInput" 
+                        placeholder="# Paste your Python code here
+# Example:
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+# This function has performance issues for large n
+result = fibonacci(10)
+print(result)"
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+                
+                <div class="d-flex align-items-center justify-content-between mt-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <label class="cr-form-label mb-0">File Name:</label>
+                        <input type="text" class="cr-form-control" id="filePathInput" value="main.py" style="width: 200px;">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="cr-btn cr-btn-secondary cr-btn-lg" id="autofixBtn" onclick="getAutoFixSuggestions()">
+                            <i class="fas fa-wrench me-2"></i>
+                            Auto-Fix Suggestions
+                        </button>
+                        <button class="cr-btn cr-btn-primary cr-btn-lg" id="analyzeBtn" onclick="startAnalysis()">
+                            <i class="fas fa-magic me-2"></i>
+                            Analyze Code
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Analysis Progress Section -->
+<div class="row mb-4" id="progressSection" style="display: none;">
+    <div class="col-12">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <h5 class="mb-0">Analysis Progress</h5>
+                <small class="text-muted">AI is analyzing your code...</small>
+            </div>
+            <div class="cr-card-body">
+                <div class="analysis-progress">
+                    <div class="progress-step pending" id="step1">
+                        <div class="progress-step-icon">1</div>
+                        <div>
+                            <div class="fw-medium">Code Validation</div>
+                            <div class="text-muted small">Checking syntax and structure</div>
+                        </div>
+                    </div>
+                    <div class="progress-step pending" id="step2">
+                        <div class="progress-step-icon">2</div>
+                        <div>
+                            <div class="fw-medium">Security Analysis</div>
+                            <div class="text-muted small">Scanning for vulnerabilities</div>
+                        </div>
+                    </div>
+                    <div class="progress-step pending" id="step3">
+                        <div class="progress-step-icon">3</div>
+                        <div>
+                            <div class="fw-medium">Performance Review</div>
+                            <div class="text-muted small">Evaluating efficiency and optimization</div>
+                        </div>
+                    </div>
+                    <div class="progress-step pending" id="step4">
+                        <div class="progress-step-icon">4</div>
+                        <div>
+                            <div class="fw-medium">Quality Assessment</div>
+                            <div class="text-muted small">Analyzing code quality and best practices</div>
+                        </div>
+                    </div>
+                    <div class="progress-step pending" id="step5">
+                        <div class="progress-step-icon">
+                            <i class="fas fa-check"></i>
+                        </div>
+                        <div>
+                            <div class="fw-medium">Report Generation</div>
+                            <div class="text-muted small">Compiling results and recommendations</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Analysis Results Section -->
+<div class="row" id="resultsSection" style="display: none;">
+    <div class="col-12">
+        <div class="cr-card">
+            <div class="cr-card-header">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h5 class="mb-0">
+                            <i class="fas fa-chart-line me-2"></i>
+                            Analysis Results
+                        </h5>
+                        <small>Comprehensive AI-powered code review report</small>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="cr-btn cr-btn-secondary cr-btn-sm" onclick="downloadReport()">
+                            <i class="fas fa-download me-1"></i>
+                            Download Report
+                        </button>
+                        <button class="cr-btn cr-btn-primary cr-btn-sm" onclick="startNewAnalysis()">
+                            <i class="fas fa-plus me-1"></i>
+                            New Analysis
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="cr-card-body">
+                <!-- Overall Score and Summary -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="text-center">
+                            <div class="display-4 fw-bold mb-2" id="overallScore" style="color: #667eea;">--</div>
+                            <div class="text-muted">Overall Score</div>
+                            <div class="mt-2">
+                                <span class="cr-badge" id="productionStatus">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-9">
+                        <h6 class="fw-bold mb-3">Executive Summary</h6>
+                        <div id="analysisSummary" class="text-muted">
+                            Analysis results will appear here...
+                        </div>
+                        <div class="mt-3" id="businessImpact" style="display: none;">
+                            <h6 class="fw-bold mb-2">Business Impact</h6>
+                            <div class="business-impact-content"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Category Scores -->
+                <div class="row mb-4">
+                    <div class="col-md-3 mb-3">
+                        <div class="text-center p-3 border rounded">
+                            <div class="h4 fw-bold mb-1" id="securityScore" style="color: #e53e3e;">--</div>
+                            <div class="small text-muted">Security</div>
+                            <div class="mt-1">
+                                <span class="cr-badge cr-badge-sm" id="securityRisk">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="text-center p-3 border rounded">
+                            <div class="h4 fw-bold mb-1" id="performanceScore" style="color: #f56565;">--</div>
+                            <div class="small text-muted">Performance</div>
+                            <div class="mt-1">
+                                <span class="cr-badge cr-badge-sm" id="performanceBottlenecks">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="text-center p-3 border rounded">
+                            <div class="h4 fw-bold mb-1" id="qualityScore" style="color: #48bb78;">--</div>
+                            <div class="small text-muted">Code Quality</div>
+                            <div class="mt-1">
+                                <span class="cr-badge cr-badge-sm" id="technicalDebt">--</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <div class="text-center p-3 border rounded">
+                            <div class="h4 fw-bold mb-1" id="architectureScore" style="color: #667eea;">--</div>
+                            <div class="small text-muted">Architecture</div>
+                            <div class="mt-1">
+                                <span class="cr-badge cr-badge-sm" id="scalabilityRating">--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Analysis Tabs -->
+                <ul class="nav nav-tabs mb-3" id="analysisTab" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="security-tab" data-bs-toggle="tab" data-bs-target="#security" type="button">
+                            <i class="fas fa-shield-alt me-1"></i>Security Issues
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="performance-tab" data-bs-toggle="tab" data-bs-target="#performance" type="button">
+                            <i class="fas fa-tachometer-alt me-1"></i>Performance
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="quality-tab" data-bs-toggle="tab" data-bs-target="#quality" type="button">
+                            <i class="fas fa-code me-1"></i>Code Quality
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="architecture-tab" data-bs-toggle="tab" data-bs-target="#architecture" type="button">
+                            <i class="fas fa-sitemap me-1"></i>Architecture
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="recommendations-tab" data-bs-toggle="tab" data-bs-target="#recommendations" type="button">
+                            <i class="fas fa-lightbulb me-1"></i>Recommendations
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="analysisTabContent">
+                    <!-- Security Tab -->
+                    <div class="tab-pane fade show active" id="security" role="tabpanel">
+                        <div id="securityIssues">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-shield-alt fa-3x mb-3"></i>
+                                <div>Security analysis will appear here...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Performance Tab -->
+                    <div class="tab-pane fade" id="performance" role="tabpanel">
+                        <div id="performanceIssues">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-tachometer-alt fa-3x mb-3"></i>
+                                <div>Performance analysis will appear here...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quality Tab -->
+                    <div class="tab-pane fade" id="quality" role="tabpanel">
+                        <div id="qualityIssues">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-code fa-3x mb-3"></i>
+                                <div>Code quality analysis will appear here...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Architecture Tab -->
+                    <div class="tab-pane fade" id="architecture" role="tabpanel">
+                        <div id="architectureIssues">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-sitemap fa-3x mb-3"></i>
+                                <div>Architecture analysis will appear here...</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recommendations Tab -->
+                    <div class="tab-pane fade" id="recommendations" role="tabpanel">
+                        <div id="recommendationsContent">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-lightbulb fa-3x mb-3"></i>
+                                <div>AI recommendations will appear here...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- Auto-Fix Suggestions Section -->
+<div class="row" id="autofixSection" style="display: none;">
+  <div class="col-12">
+    <div class="cr-card">
+      <div class="cr-card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0"><i class="fas fa-magic me-2"></i>Auto-Fix Suggestions</h5>
+        <small class="text-muted">Experimental</small>
+      </div>
+      <div class="cr-card-body" id="autofixResults">
+        <!-- Suggestions will be shown here -->
+      </div>
+    </div>
+  </div>
+  </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentLanguage = 'python';
+let currentAnalysisId = null;
+let analysisTimer = null;
+let pollIntervalHandle = null;
+
+document.addEventListener('DOMContentLoaded', function() {
+    initializeLanguageSelector();
+    initializeFileUpload();
+    updatePlaceholder();
+});
+
+function initializeLanguageSelector() {
+    document.querySelectorAll('.language-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.language-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            currentLanguage = this.dataset.lang;
+            updatePlaceholder();
+            updateFileExtension();
+        });
+    });
+}
+
+function initializeFileUpload() {
+    const dropZone = document.getElementById('fileUploadZone');
+    
+    // Drag and drop functionality
+    dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        this.classList.add('dragover');
+    });
+    
+    dropZone.addEventListener('dragleave', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+    });
+    
+    dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        this.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            handleFileUpload({files: files});
+        }
+    });
+}
+
+function updatePlaceholder() {
+    const placeholders = {
+        python: `# Paste your Python code here
+# Example:
+def fibonacci(n):
+    if n <= 1:
+        return n
+    return fibonacci(n-1) + fibonacci(n-2)
+
+# This function has performance issues for large n
+result = fibonacci(10)
+print(result)`,
+        javascript: `// Paste your JavaScript code here
+// Example:
+function fibonacci(n) {
+    if (n <= 1) return n;
+    return fibonacci(n-1) + fibonacci(n-2);
+}
+
+// This function has performance issues for large n
+const result = fibonacci(10);
+console.log(result);`,
+        java: `// Paste your Java code here
+// Example:
+public class Example {
+    public static int fibonacci(int n) {
+        if (n <= 1) return n;
+        return fibonacci(n-1) + fibonacci(n-2);
+    }
+    
+    public static void main(String[] args) {
+        int result = fibonacci(10);
+        System.out.println(result);
+    }
+}`
+    };
+    
+    document.getElementById('codeInput').placeholder = placeholders[currentLanguage] || placeholders.python;
+}
+
+function updateFileExtension() {
+    const extensions = {
+        python: '.py',
+        javascript: '.js',
+        java: '.java',
+        typescript: '.ts',
+        cpp: '.cpp',
+        csharp: '.cs',
+        go: '.go',
+        rust: '.rs'
+    };
+    
+    const filePathInput = document.getElementById('filePathInput');
+    const currentName = filePathInput.value.split('.')[0];
+    filePathInput.value = currentName + extensions[currentLanguage];
+    
+    // Update tab
+    const tabIcon = {
+        python: 'fab fa-python',
+        javascript: 'fab fa-js-square',
+        java: 'fab fa-java',
+        typescript: 'fab fa-js-square',
+        cpp: 'fas fa-code',
+        csharp: 'fas fa-code',
+        go: 'fas fa-code',
+        rust: 'fas fa-code'
+    };
+    
+    document.querySelector('#currentTab i').className = tabIcon[currentLanguage];
+    document.getElementById('currentFileName').textContent = filePathInput.value;
+}
+
+function handleFileUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        document.getElementById('codeInput').value = e.target.result;
+        document.getElementById('filePathInput').value = file.name;
+        document.getElementById('currentFileName').textContent = file.name;
+        
+        // Auto-detect language from file extension
+        const ext = file.name.split('.').pop().toLowerCase();
+        const langMap = {
+            'py': 'python',
+            'js': 'javascript',
+            'java': 'java',
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'jsx': 'javascript',
+            'cpp': 'cpp',
+            'c': 'cpp',
+            'cs': 'csharp',
+            'go': 'go',
+            'rs': 'rust'
+        };
+        
+        if (langMap[ext]) {
+            currentLanguage = langMap[ext];
+            document.querySelectorAll('.language-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.lang === currentLanguage);
+            });
+        }
+        
+        CodeReviewUI.showToast(`File "${file.name}" loaded successfully!`, 'success');
+    };
+    reader.readAsText(file);
+}
+
+function clearCode() {
+    document.getElementById('codeInput').value = '';
+    document.getElementById('filePathInput').value = 'main.' + (currentLanguage === 'python' ? 'py' : 'js');
+    updateFileExtension();
+    CodeReviewUI.showToast('Code cleared', 'info');
+}
+
+function formatCode() {
+    const code = document.getElementById('codeInput').value;
+    if (!code.trim()) {
+        CodeReviewUI.showToast('No code to format', 'warning');
+        return;
+    }
+    
+    // Basic formatting (in a real implementation, you'd use a proper formatter)
+    const formatted = code.split('\n').map(line => line.trim()).join('\n');
+    document.getElementById('codeInput').value = formatted;
+    CodeReviewUI.showToast('Code formatted', 'success');
+}
+
+function copyCode() {
+    const code = document.getElementById('codeInput').value;
+    CodeReviewUI.copyToClipboard(code);
+}
+
+function toggleFullscreen() {
+    const container = document.querySelector('.code-editor-container');
+    if (container.requestFullscreen) {
+        container.requestFullscreen();
+    }
+}
+
+function startAnalysis() {
+    const code = document.getElementById('codeInput').value.trim();
+    const filePath = document.getElementById('filePathInput').value;
+    
+    if (!code) {
+        CodeReviewUI.showToast('Please enter some code to analyze', 'warning');
+        return;
+    }
+    
+    // Show progress section
+    document.getElementById('progressSection').style.display = 'block';
+    document.getElementById('resultsSection').style.display = 'none'; // Hide results initially
+    
+    // Disable analyze button
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    analyzeBtn.disabled = true;
+    analyzeBtn.innerHTML = '<div class="cr-loading me-2"></div>Analyzing...';
+    
+    // Start progress animation
+    simulateProgress();
+    
+    // Make API call
+    fetch('/api/analyze/file', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            code: code,
+            file_path: filePath
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        currentAnalysisId = data.review_id;
+        CodeReviewUI.showToast('Analysis started successfully!', 'success');
+        
+        // Start polling for results
+        pollForResults();
+    })
+    .catch(error => {
+        console.error('Analysis error:', error);
+        CodeReviewUI.showToast('Failed to start analysis: ' + error.message, 'error');
+        resetAnalysisUI();
+    });
+}
+
+function simulateProgress() {
+    const steps = ['step1', 'step2', 'step3', 'step4', 'step5'];
+    let currentStep = 0;
+    
+    const progressInterval = setInterval(() => {
+        if (currentStep < steps.length) {
+            // Mark current step as active
+            document.getElementById(steps[currentStep]).classList.remove('pending');
+            document.getElementById(steps[currentStep]).classList.add('active');
+            
+            // Mark previous step as completed
+            if (currentStep > 0) {
+                document.getElementById(steps[currentStep - 1]).classList.remove('active');
+                document.getElementById(steps[currentStep - 1]).classList.add('completed');
+            }
+            
+            currentStep++;
+        } else {
+            clearInterval(progressInterval);
+        }
+    }, 1000);
+    
+    // Store interval for cleanup
+    analysisTimer = progressInterval;
+}
+
+function pollForResults() {
+    if (!currentAnalysisId) return;
+    
+    // Clear existing poll if any
+    if (pollIntervalHandle) {
+        clearInterval(pollIntervalHandle);
+        pollIntervalHandle = null;
+    }
+
+    pollIntervalHandle = setInterval(() => {
+        fetch(`/api/reviews/${currentAnalysisId}/status`)
+            .then(response => response.json())
+            .then(data => {
+                console.log('Poll status:', data);
+                if (data.status === 'completed') {
+                    clearInterval(pollIntervalHandle);
+                    pollIntervalHandle = null;
+                    if (analysisTimer) {
+                        clearInterval(analysisTimer);
+                    }
+                    
+                    // Mark all steps as completed
+                    document.querySelectorAll('.progress-step').forEach(step => {
+                        step.classList.remove('pending', 'active');
+                        step.classList.add('completed');
+                    });
+                    
+                    // Fetch detailed results
+                    fetch(`/api/reviews/${currentAnalysisId}`)
+                        .then(response => response.json())
+                        .then(reviewData => {
+                            console.log('Review data:', reviewData);
+                            displayAnalysisResults(reviewData);
+                            // Optional: navigate to details view after showing results briefly
+                            setTimeout(() => {
+                                window.location.href = `/reviews/${currentAnalysisId}`;
+                            }, 1500);
+                        })
+                        .catch(error => {
+                            console.error('Error fetching results:', error);
+                            CodeReviewUI.showToast('Error loading analysis results', 'error');
+                            resetAnalysisUI();
+                        });
+                } else if (data.status === 'failed') {
+                    clearInterval(pollIntervalHandle);
+                    pollIntervalHandle = null;
+                    CodeReviewUI.showToast('Analysis failed. Please try again.', 'error');
+                    resetAnalysisUI();
+                }
+            })
+            .catch(error => {
+                console.error('Error checking analysis status:', error);
+                // Don't clear interval on network errors, keep trying
+            });
+    }, 2000);
+    
+    // Set timeout to prevent infinite polling
+    setTimeout(() => {
+        if (pollIntervalHandle) { clearInterval(pollIntervalHandle); pollIntervalHandle = null; }
+        if (document.getElementById('resultsSection').style.display === 'none') {
+            CodeReviewUI.showToast('Analysis is taking longer than expected. Please check the Reviews section.', 'warning');
+            resetAnalysisUI();
+        }
+    }, 60000); // 1 minute timeout
+}
+
+function fetchAnalysisResults(data) {
+    fetch(`/api/reviews/${currentAnalysisId}`)
+        .then(response => response.json())
+        .then(data => {
+            displayAnalysisResults(data.review);
+        })
+        .catch(error => {
+            console.error('Results fetch error:', error);
+            CodeReviewUI.showToast('Failed to fetch analysis results', 'error');
+            resetAnalysisUI();
+        });
+}
+
+function displayAnalysisResults(data) {
+    console.log('Displaying analysis results:', data);
+    
+    // Hide progress section
+    document.getElementById('progressSection').style.display = 'none';
+    
+    // Show results section
+    document.getElementById('resultsSection').style.display = 'block';
+    
+    // Reset analyze button
+    resetAnalysisUI();
+    
+    // Handle both direct analysis data and wrapped response
+    const analysisData = data.analysis || data;
+    
+    // Update overall score and status
+    const overallScore = Math.round(analysisData.overall_score || 0);
+    document.getElementById('overallScore').textContent = overallScore;
+    
+    // Set production readiness status
+    const productionStatus = document.getElementById('productionStatus');
+    const readiness = analysisData.production_readiness || (overallScore >= 85 ? 'ready' : 'needs_work');
+    productionStatus.textContent = readiness.replace('_', ' ').toUpperCase();
+    productionStatus.className = `cr-badge cr-badge-${getStatusColor(readiness)}`;
+    
+    // Update analysis summary
+    const summaryText = analysisData.analysis_summary || 'Code analysis completed successfully. Review the detailed findings in each category below.';
+    document.getElementById('analysisSummary').innerHTML = summaryText;
+    
+    // Update business impact if available
+    if (analysisData.business_impact) {
+        document.getElementById('businessImpact').style.display = 'block';
+        document.querySelector('.business-impact-content').innerHTML = analysisData.business_impact;
+    }
+    
+    // Update category scores
+    updateCategoryScore('security', analysisData.security);
+    updateCategoryScore('performance', analysisData.performance);
+    updateCategoryScore('quality', analysisData.quality);
+    updateCategoryScore('architecture', analysisData.architecture);
+    
+    // Display detailed issues by category
+    displayDetailedIssues(analysisData);
+    
+    // Display recommendations
+    displayRecommendations(analysisData.recommendations);
+    
+    // Store data for download
+    window.currentAnalysisData = analysisData;
+    
+    // Scroll to results
+    document.getElementById('resultsSection').scrollIntoView({ behavior: 'smooth' });
+    
+    CodeReviewUI.showToast('Analysis completed successfully!', 'success');
+}
+
+function updateCategoryScore(category, categoryData) {
+    if (!categoryData) {
+        // Set default values if no data
+        document.getElementById(`${category}Score`).textContent = '--';
+        return;
+    }
+    
+    const scoreElement = document.getElementById(`${category}Score`);
+    const score = Math.round(categoryData.score || 0);
+    scoreElement.textContent = score;
+    
+    // Update additional category-specific info
+    if (category === 'security') {
+        const riskElement = document.getElementById('securityRisk');
+        const riskLevel = categoryData.risk_level || (score >= 80 ? 'low' : score >= 60 ? 'medium' : 'high');
+        riskElement.textContent = riskLevel.toUpperCase();
+        riskElement.className = `cr-badge cr-badge-sm cr-badge-${getStatusColor(riskLevel)}`;
+    } else if (category === 'performance') {
+        const bottlenecksElement = document.getElementById('performanceBottlenecks');
+        const bottlenecks = categoryData.bottlenecks?.length || (categoryData.issues ? categoryData.issues.length : 0);
+        bottlenecksElement.textContent = `${bottlenecks} Issues`;
+        bottlenecksElement.className = `cr-badge cr-badge-sm cr-badge-${bottlenecks > 2 ? 'danger' : bottlenecks > 0 ? 'warning' : 'success'}`;
+    } else if (category === 'quality') {
+        const debtElement = document.getElementById('technicalDebt');
+        const debtHours = categoryData.technical_debt_hours || Math.max(0, 20 - score/5);
+        debtElement.textContent = `${Math.round(debtHours)}h debt`;
+        debtElement.className = `cr-badge cr-badge-sm cr-badge-${debtHours > 20 ? 'danger' : debtHours > 5 ? 'warning' : 'success'}`;
+    } else if (category === 'architecture') {
+        const scalabilityElement = document.getElementById('scalabilityRating');
+        const rating = categoryData.scalability_rating || Math.round(score/10);
+        scalabilityElement.textContent = `${rating}/10`;
+        scalabilityElement.className = `cr-badge cr-badge-sm cr-badge-${rating < 5 ? 'danger' : rating < 7 ? 'warning' : 'success'}`;
+    }
+}
+
+function displayDetailedIssues(data) {
+    const categories = ['security', 'performance', 'quality', 'architecture'];
+    
+    categories.forEach(category => {
+        const categoryData = data[category];
+        const container = document.getElementById(`${category}Issues`);
+        
+        if (!categoryData || !categoryData.issues || categoryData.issues.length === 0) {
+            container.innerHTML = `
+                <div class="text-center text-success py-4">
+                    <i class="fas fa-check-circle fa-3x mb-3" style="color: #48bb78;"></i>
+                    <h5 style="color: #2d3748;">No ${category} issues found!</h5>
+                    <p class="text-muted">This category looks great.</p>
+                </div>
+            `;
+            return;
+        }
+        
+        container.innerHTML = categoryData.issues.map(issue => `
+            <div class="card mb-3 border-start border-${getSeverityColor(issue.severity)} border-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <h6 class="card-title mb-0" style="color: #2d3748;">
+                            <i class="fas fa-${getIssueIcon(category)} me-2"></i>
+                            ${issue.description || 'Code issue detected'}
+                        </h6>
+                        <div class="d-flex gap-2">
+                            <span class="cr-badge cr-badge-${getSeverityColor(issue.severity)}">
+                                ${(issue.severity || 'MEDIUM').toUpperCase()}
+                            </span>
+                            ${issue.line ? `<span class="cr-badge cr-badge-info">Line ${issue.line}</span>` : ''}
+                        </div>
+                    </div>
+                    
+                    ${issue.business_impact ? `
+                        <div class="alert alert-warning mb-3">
+                            <strong>Business Impact:</strong> ${issue.business_impact}
+                        </div>
+                    ` : ''}
+                    
+                    <div class="mb-3">
+                        <strong style="color: #2d3748;">Issue Details:</strong>
+                        <p class="mb-2" style="color: #4a5568;">${issue.description || 'No detailed description available'}</p>
+                        ${issue.current_complexity ? `<p class="small text-muted">Current: ${issue.current_complexity}</p>` : ''}
+                        ${issue.technical_debt ? `<p class="small text-muted">Technical Debt: ${issue.technical_debt}</p>` : ''}
+                    </div>
+                    
+                    <div class="mb-3">
+                        <strong style="color: #2d3748;">Recommended Solution:</strong>
+                        <div class="bg-light p-3 rounded" style="color: #4a5568;">
+                            ${issue.suggestion || 'Review and refactor this code section for better practices.'}
+                        </div>
+                        ${issue.optimized_complexity ? `<p class="small text-success mt-2">Target: ${issue.optimized_complexity}</p>` : ''}
+                        ${issue.expected_improvement ? `<p class="small text-success mt-1">Expected Improvement: ${issue.expected_improvement}</p>` : ''}
+                    </div>
+                    
+                    ${issue.pattern_recommendation ? `
+                        <div class="mb-2">
+                            <strong style="color: #2d3748;">Recommended Pattern:</strong> 
+                            <code>${issue.pattern_recommendation}</code>
+                        </div>
+                    ` : ''}
+                    
+                    ${issue.best_practice ? `
+                        <div class="mb-2">
+                            <strong style="color: #2d3748;">Best Practice:</strong> 
+                            <span style="color: #4a5568;">${issue.best_practice}</span>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">
+                            <i class="fas fa-clock me-1"></i>
+                            Estimated effort: ${issue.effort_estimate || 'Medium'}
+                        </small>
+                        ${issue.priority ? `
+                            <span class="cr-badge cr-badge-${getPriorityColor(issue.priority)}">
+                                ${(issue.priority || 'MEDIUM').toUpperCase()} PRIORITY
+                            </span>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    });
+}
+
+function displayRecommendations(recommendations) {
+    const container = document.getElementById('recommendationsContent');
+    
+    if (!recommendations) {
+        container.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-lightbulb fa-3x mb-3" style="color: #667eea;"></i>
+                <h5 style="color: #2d3748;">General Recommendations</h5>
+                <div class="text-muted">
+                    <p>• Follow language-specific best practices and coding standards</p>
+                    <p>• Implement proper error handling and input validation</p>
+                    <p>• Add comprehensive documentation and comments</p>
+                    <p>• Consider performance optimization opportunities</p>
+                    <p>• Ensure security measures are in place</p>
+                </div>
+            </div>
+        `;
+        return;
+    }
+    
+    container.innerHTML = `
+        <div class="row">
+            <div class="col-md-4 mb-4">
+                <div class="card h-100 border-danger">
+                    <div class="card-header bg-danger text-white">
+                        <h6 class="mb-0">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Immediate Actions
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        ${recommendations.immediate_actions && recommendations.immediate_actions.length > 0 ? 
+                            recommendations.immediate_actions.map(action => `
+                                <div class="d-flex align-items-start mb-2">
+                                    <i class="fas fa-arrow-right text-danger me-2 mt-1"></i>
+                                    <span style="color: #2d3748;">${action}</span>
+                                </div>
+                            `).join('') : 
+                            '<p class="text-muted">No immediate actions required.</p>'
+                        }
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card h-100 border-warning">
+                    <div class="card-header bg-warning text-dark">
+                        <h6 class="mb-0">
+                            <i class="fas fa-calendar-alt me-2"></i>
+                            Short-term Goals
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        ${recommendations.short_term_goals && recommendations.short_term_goals.length > 0 ? 
+                            recommendations.short_term_goals.map(goal => `
+                                <div class="d-flex align-items-start mb-2">
+                                    <i class="fas fa-arrow-right text-warning me-2 mt-1"></i>
+                                    <span style="color: #2d3748;">${goal}</span>
+                                </div>
+                            `).join('') : 
+                            '<p class="text-muted">No short-term goals identified.</p>'
+                        }
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <div class="card h-100 border-success">
+                    <div class="card-header bg-success text-white">
+                        <h6 class="mb-0">
+                            <i class="fas fa-chart-line me-2"></i>
+                            Long-term Strategy
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        ${recommendations.long_term_strategy && recommendations.long_term_strategy.length > 0 ? 
+                            recommendations.long_term_strategy.map(strategy => `
+                                <div class="d-flex align-items-start mb-2">
+                                    <i class="fas fa-arrow-right text-success me-2 mt-1"></i>
+                                    <span style="color: #2d3748;">${strategy}</span>
+                                </div>
+                            `).join('') : 
+                            '<p class="text-muted">No long-term strategy recommendations.</p>'
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        ${recommendations.roi_analysis ? `
+            <div class="card mt-4">
+                <div class="card-header bg-info text-white">
+                    <h6 class="mb-0">
+                        <i class="fas fa-dollar-sign me-2"></i>
+                        ROI Analysis
+                    </h6>
+                </div>
+                <div class="card-body" style="color: #2d3748;">
+                    ${recommendations.roi_analysis}
+                </div>
+            </div>
+        ` : ''}
+    `;
+}
+
+// Helper functions
+function getStatusColor(status) {
+    switch(status?.toLowerCase()) {
+        case 'ready': case 'low': return 'success';
+        case 'needs_work': case 'medium': return 'warning';
+        case 'critical': case 'high': return 'danger';
+        default: return 'info';
+    }
+}
+
+function getSeverityColor(severity) {
+    switch(severity?.toLowerCase()) {
+        case 'critical': return 'danger';
+        case 'high': return 'warning';
+        case 'medium': return 'info';
+        case 'low': return 'success';
+        default: return 'secondary';
+    }
+}
+
+function getPriorityColor(priority) {
+    switch(priority?.toLowerCase()) {
+        case 'immediate': return 'danger';
+        case 'high': return 'warning';
+        case 'medium': return 'info';
+        case 'low': return 'success';
+        default: return 'secondary';
+    }
+}
+
+function getIssueIcon(category) {
+    switch(category) {
+        case 'security': return 'shield-alt';
+        case 'performance': return 'tachometer-alt';
+        case 'quality': return 'code';
+        case 'architecture': return 'sitemap';
+        default: return 'exclamation-circle';
+    }
+}
+
+// Download report functionality
+function downloadReport() {
+    if (!window.currentAnalysisData) {
+        CodeReviewUI.showToast('No analysis data available to download', 'warning');
+        return;
+    }
+    
+    const data = window.currentAnalysisData;
+    const fileName = `code-analysis-report-${new Date().toISOString().split('T')[0]}.html`;
+    
+    const reportHTML = generateReportHTML(data);
+    const blob = new Blob([reportHTML], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    CodeReviewUI.showToast('Report downloaded successfully!', 'success');
+}
+
+function generateReportHTML(data) {
+    const currentDate = new Date().toLocaleDateString();
+    const overallScore = Math.round(data.overall_score || 0);
+    
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Analysis Report - ${currentDate}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            line-height: 1.6; 
+            color: #2d3748; 
+            background: #f8fafc;
+            padding: 2rem;
+        }
+        .container { max-width: 1200px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header { 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+            color: white; 
+            padding: 3rem 2rem; 
+            text-align: center; 
+        }
+        .header h1 { font-size: 2.5rem; margin-bottom: 1rem; font-weight: 700; }
+        .score { font-size: 4rem; font-weight: bold; margin: 1rem 0; }
+        .content { padding: 2rem; }
+        .section { margin: 2rem 0; }
+        .section h2 { color: #1a202c; margin-bottom: 1rem; font-size: 1.5rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+        .category { 
+            margin: 2rem 0; 
+            padding: 1.5rem; 
+            border-left: 4px solid #667eea; 
+            background: #f7fafc; 
+            border-radius: 0 8px 8px 0;
+        }
+        .category h3 { color: #2d3748; margin-bottom: 1rem; }
+        .issue { 
+            margin: 1rem 0; 
+            padding: 1.5rem; 
+            border: 1px solid #e2e8f0; 
+            border-radius: 8px; 
+            background: white;
+        }
+        .severity-critical { border-left: 4px solid #e53e3e; }
+        .severity-high { border-left: 4px solid #f56565; }
+        .severity-medium { border-left: 4px solid #ed8936; }
+        .severity-low { border-left: 4px solid #48bb78; }
+        .recommendation { 
+            background: #e6fffa; 
+            padding: 1rem; 
+            border-radius: 8px; 
+            margin: 1rem 0; 
+            border-left: 4px solid #38b2ac;
+        }
+        .badge { 
+            display: inline-block; 
+            padding: 0.25rem 0.75rem; 
+            border-radius: 20px; 
+            font-size: 0.75rem; 
+            font-weight: 600; 
+            text-transform: uppercase;
+            margin-right: 0.5rem;
+        }
+        .badge-success { background: #c6f6d5; color: #22543d; }
+        .badge-warning { background: #fef5e7; color: #c05621; }
+        .badge-danger { background: #fed7d7; color: #c53030; }
+        .badge-info { background: #bee3f8; color: #2c5282; }
+        .footer { 
+            background: #f7fafc; 
+            padding: 2rem; 
+            text-align: center; 
+            color: #718096; 
+            border-top: 1px solid #e2e8f0; 
+        }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; margin: 2rem 0; }
+        .metric-card { 
+            background: white; 
+            padding: 1.5rem; 
+            border-radius: 8px; 
+            border: 1px solid #e2e8f0; 
+            text-align: center;
+        }
+        .metric-value { font-size: 2rem; font-weight: bold; color: #667eea; }
+        .metric-label { color: #718096; font-size: 0.875rem; margin-top: 0.5rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Code Analysis Report</h1>
+            <div class="score">${overallScore}/100</div>
+            <p>Generated on ${currentDate}</p>
+            <p>Production Readiness: ${data.production_readiness || (overallScore >= 85 ? 'Ready' : 'Needs Work')}</p>
+        </div>
+        
+        <div class="content">
+            <div class="section">
+                <h2>📊 Executive Summary</h2>
+                <p>${data.analysis_summary || 'Code analysis completed successfully with detailed findings across multiple categories.'}</p>
+                ${data.business_impact ? `
+                    <div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+                        <strong>Business Impact:</strong> ${data.business_impact}
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div class="section">
+                <h2>📈 Category Scores</h2>
+                <div class="grid">
+                    ${['security', 'performance', 'quality', 'architecture'].map(category => {
+                        const categoryData = data[category] || {};
+                        const score = Math.round(categoryData.score || 0);
+                        return `
+                            <div class="metric-card">
+                                <div class="metric-value">${score}/100</div>
+                                <div class="metric-label">${category.charAt(0).toUpperCase() + category.slice(1)}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+            
+            ${['security', 'performance', 'quality', 'architecture'].map(category => {
+                const categoryData = data[category];
+                if (!categoryData) return '';
+                
+                return `
+                    <div class="category">
+                        <h3>🔍 ${category.charAt(0).toUpperCase() + category.slice(1)} Analysis</h3>
+                        <p><strong>Score:</strong> ${Math.round(categoryData.score || 0)}/100</p>
+                        
+                        ${categoryData.issues && categoryData.issues.length > 0 ? `
+                            <h4 style="margin-top: 1.5rem; margin-bottom: 1rem;">Issues Found:</h4>
+                            ${categoryData.issues.map(issue => `
+                                <div class="issue severity-${(issue.severity || 'medium').toLowerCase()}">
+                                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                                        <h5 style="margin: 0; color: #2d3748;">${issue.description || 'Code issue detected'}</h5>
+                                        <div>
+                                            <span class="badge badge-${getSeverityColor(issue.severity)}">${(issue.severity || 'Medium').toUpperCase()}</span>
+                                            ${issue.line ? `<span class="badge badge-info">Line ${issue.line}</span>` : ''}
+                                        </div>
+                                    </div>
+                                    
+                                    ${issue.business_impact ? `
+                                        <div style="background: #fff3cd; padding: 1rem; border-radius: 4px; margin-bottom: 1rem;">
+                                            <strong>Business Impact:</strong> ${issue.business_impact}
+                                        </div>
+                                    ` : ''}
+                                    
+                                    <div style="margin-bottom: 1rem;">
+                                        <strong>Problem:</strong><br>
+                                        ${issue.description || 'Review this code section for potential improvements.'}
+                                    </div>
+                                    
+                                    <div class="recommendation">
+                                        <strong>💡 Recommended Solution:</strong><br>
+                                        ${issue.suggestion}
+                                    </div>
+                                    
+                                    ${issue.effort_estimate ? `
+                                        <div style="margin-top: 1rem; font-size: 0.875rem; color: #718096;">
+                                            <strong>Estimated Effort:</strong> ${issue.effort_estimate}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        ` : '<p style="color: #48bb78; font-weight: 500;">✅ No issues found in this category!</p>'}
+                    </div>
+                `;
+            }).join('')}
+            
+            ${data.recommendations ? `
+                <div class="section">
+                    <h2>💡 AI Recommendations</h2>
+                    
+                    ${data.recommendations.immediate_actions && data.recommendations.immediate_actions.length > 0 ? `
+                        <div style="margin: 1.5rem 0;">
+                            <h3 style="color: #e53e3e;">🚨 Immediate Actions</h3>
+                            <ul style="margin-left: 1.5rem;">
+                                ${data.recommendations.immediate_actions.map(action => `<li style="margin: 0.5rem 0;">${action}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    
+                    ${data.recommendations.short_term_goals && data.recommendations.short_term_goals.length > 0 ? `
+                        <div style="margin: 1.5rem 0;">
+                            <h3 style="color: #ed8936;">📅 Short-term Goals</h3>
+                            <ul style="margin-left: 1.5rem;">
+                                ${data.recommendations.short_term_goals.map(goal => `<li style="margin: 0.5rem 0;">${goal}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    
+                    ${data.recommendations.long_term_strategy && data.recommendations.long_term_strategy.length > 0 ? `
+                        <div style="margin: 1.5rem 0;">
+                            <h3 style="color: #48bb78;">🎯 Long-term Strategy</h3>
+                            <ul style="margin-left: 1.5rem;">
+                                ${data.recommendations.long_term_strategy.map(strategy => `<li style="margin: 0.5rem 0;">${strategy}</li>`).join('')}
+                            </ul>
+                        </div>
+                    ` : ''}
+                    
+                    ${data.recommendations.roi_analysis ? `
+                        <div style="margin: 1.5rem 0; padding: 1.5rem; background: #e6fffa; border-radius: 8px; border-left: 4px solid #38b2ac;">
+                            <h3 style="color: #2c7a7b;">💰 ROI Analysis</h3>
+                            <p>${data.recommendations.roi_analysis}</p>
+                        </div>
+                    ` : ''}
+                </div>
+            ` : ''}
+        </div>
+        
+        <div class="footer">
+            <p><strong>Report generated by CodeReview AI - Enterprise Edition</strong></p>
+            <p>Advanced AI-powered code analysis for professional development teams</p>
+            <p style="margin-top: 1rem; font-size: 0.875rem;">This report contains detailed analysis and recommendations. Please review all findings with your development team.</p>
+        </div>
+    </div>
+</body>
+</html>
+    `;
+}
+
+function resetAnalysisUI() {
+    const analyzeBtn = document.getElementById('analyzeBtn');
+    analyzeBtn.disabled = false;
+    analyzeBtn.innerHTML = '<i class="fas fa-magic me-2"></i>Analyze Code';
+    
+    // Reset progress steps
+    document.querySelectorAll('.progress-step').forEach(step => {
+        step.classList.remove('active', 'completed');
+        step.classList.add('pending');
+    });
+    
+    // Clear any timers
+    if (analysisTimer) { clearInterval(analysisTimer); analysisTimer = null; }
+    if (pollIntervalHandle) { clearInterval(pollIntervalHandle); pollIntervalHandle = null; }
+}
+
+async function getAutoFixSuggestions(){
+  const code = document.getElementById('codeInput').value.trim();
+  const filePath = document.getElementById('filePathInput').value;
+  if (!code) { CodeReviewUI.showToast('Please enter code for auto-fix suggestions', 'warning'); return; }
+  const btn = document.getElementById('autofixBtn');
+  const original = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<div class="cr-loading me-2"></div>Analyzing...';
+  try{
+    const res = await fetch('/api/autofix/analyze', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ file_path: filePath, content: code, language: currentLanguage })});
+    const data = await res.json();
+    const fixes = data.fixes || [];
+    renderAutoFixes(fixes);
+    document.getElementById('autofixSection').style.display = 'block';
+    CodeReviewUI.showToast(`Found ${fixes.length} suggested fixes`, 'success');
+  }catch(e){
+    console.error(e); CodeReviewUI.showToast('Auto-fix analysis failed', 'error');
+  }finally{
+    btn.disabled = false; btn.innerHTML = original;
+  }
+}
+
+function renderAutoFixes(fixes){
+  const container = document.getElementById('autofixResults');
+  if (!fixes.length){ container.innerHTML = '<div class="text-muted">No fixes suggested.</div>'; return; }
+  container.innerHTML = fixes.map(f => `
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>${escapeHtml(f.issue_type || 'Issue')}</strong>
+        <span class="badge bg-${severityToColor(f.severity)}">${(f.severity||'info').toUpperCase()}</span>
+      </div>
+      <div class="card-body">
+        <p class="mb-2">${escapeHtml(f.description || '')}</p>
+        ${f.original_code ? `<pre class="code-snippet"><code>${escapeHtml(f.original_code)}</code></pre>` : ''}
+        ${f.fixed_code ? `<div class="mt-2"><strong>Suggested Fix:</strong><pre class="code-snippet"><code>${escapeHtml(f.fixed_code)}</code></pre></div>` : ''}
+        <div class="mt-2 d-flex gap-2">
+          ${f.fixed_code ? `<button class="cr-btn cr-btn-sm cr-btn-secondary" onclick="CodeReviewUI.copyToClipboard(${JSON.stringify('${f.fixed_code}').replace(/"/g,'\"')})"><i class='fas fa-copy me-1'></i>Copy Fix</button>` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function severityToColor(s){ s=(s||'').toLowerCase(); if(s==='critical'||s==='high')return 'danger'; if(s==='medium')return 'warning'; if(s==='low')return 'success'; return 'info'; }
+function escapeHtml(s){return (s||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function exportResults() {
+    CodeReviewUI.showToast('Export functionality coming soon!', 'info');
+}
+
+function startNewAnalysis() {
+    document.getElementById('resultsSection').style.display = 'none';
+    document.getElementById('progressSection').style.display = 'none';
+    document.getElementById('codeInput').value = '';
+    document.getElementById('filePathInput').value = 'main.py';
+    resetAnalysisUI();
+    
+    // Scroll back to top
+    document.querySelector('.code-editor-container').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey || e.metaKey) {
+        switch(e.key) {
+            case 'Enter':
+                e.preventDefault();
+                startAnalysis();
+                break;
+            case 'k':
+                e.preventDefault();
+                clearCode();
+                break;
+        }
+    }
+});
+</script>
+{% endblock %} 
