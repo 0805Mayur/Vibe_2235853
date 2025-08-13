@@ -654,7 +654,7 @@ def get_repositories_from_git(platform: str = "github", db: Session = Depends(ge
                 refresh_success = git_service.refresh_github_client(current_token)
                 if not refresh_success:
                     logger.warning("⚠️ Failed to refresh GitHub SDK client")
-            else:
+                else:
                 logger.warning("⚠️ Git service not available; using fallback data")
                 return get_fallback_repositories(platform)
         
