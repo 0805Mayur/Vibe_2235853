@@ -6,25 +6,131 @@ pool:
 
 variables:
   PYTHON_VERSION: '3.11'
+  # Update these four for your environment
+  azureServiceConnection: 'AzureServiceConnection'      # Service connection name in Azure DevOps
+  resourceGroupName: 'rg-code-review'                   # Resource group with your Web Apps
+  backendAppName: 'cr-backend-prod'                     # Backend App Service name
+  frontendAppName: 'cr-frontend-prod'                   # Frontend App Service name
 
-steps:
-- task: UsePythonVersion@0
-  inputs:
-    versionSpec: '$(PYTHON_VERSION)'
-    addToPath: true
+stages:
+- stage: Build
+  displayName: Build and Publish
+  jobs:
+  - job: Build
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(PYTHON_VERSION)'
+        addToPath: true
 
-- script: |
-    python -m pip install --upgrade pip
-    python -m pip install -r requirements.txt
-  displayName: 'Install dependencies'
+    - script: |
+        python -m pip install --upgrade pip
+        python -m pip install -r requirements.txt
+      displayName: 'Install dependencies'
 
-- script: |
-    python -c "import sys; import os; print('Python', sys.version); assert os.path.exists('frontend/app.py') and os.path.exists('backend/main.py')"
-  displayName: 'Sanity check'
+    - script: |
+        python -c "import sys,os;print('Python',sys.version);assert os.path.exists('frontend/app.py') and os.path.exists('backend/main.py')"
+      displayName: 'Sanity check'
 
-- task: PublishBuildArtifacts@1
-  inputs:
-    PathtoPublish: '.'
-    ArtifactName: 'drop'
-    publishLocation: 'Container'
-  displayName: 'Publish artifacts' 
+    - task: ArchiveFiles@2
+      inputs:
+        rootFolderOrFile: '$(Build.SourcesDirectory)'
+        includeRootFolder: true
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/site.zip'
+        replaceExistingArchive: true
+      displayName: 'Archive site.zip'
+
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'drop'
+        publishLocation: 'Container'
+      displayName: 'Publish artifact'
+
+- stage: Deploy_Backend
+  displayName: Deploy Backend (FastAPI)
+  dependsOn: Build
+  jobs:
+  - deployment: DeployBackend
+    environment: 'prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy backend to $(backendAppName)'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(backendAppName)'
+              package: '$(System.ArtifactsDirectory)/drop/site.zip'
+
+          - task: AzureAppServiceSettings@1
+            displayName: 'Configure backend app settings and startup'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(backendAppName)'
+              resourceGroupName: '$(resourceGroupName)'
+              appSettings: |
+                [
+                  { "name": "WEBSITES_PORT", "value": "8000" },
+                  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "1" },
+                  { "name": "GITHUB_TOKEN", "value": "$(GITHUB_TOKEN)", "slotSetting": false },
+                  { "name": "FRONTEND_URL", "value": "https://$(frontendAppName).azurewebsites.net" }
+                ]
+              generalSettings: |
+                {
+                  "webFrameworkVersion": "",
+                  "linuxFxVersion": "PYTHON|3.11",
+                  "appCommandLine": "python -m pip install --upgrade pip && python -m pip install -r requirements.txt && gunicorn -w 2 -k uvicorn.workers.UvicornWorker backend.main:app --bind 0.0.0.0:8000"
+                }
+
+- stage: Deploy_Frontend
+  displayName: Deploy Frontend (Flask)
+  dependsOn: Deploy_Backend
+  jobs:
+  - deployment: DeployFrontend
+    environment: 'prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: DownloadBuildArtifacts@0
+            inputs:
+              buildType: 'current'
+              downloadType: 'single'
+              artifactName: 'drop'
+              downloadPath: '$(System.ArtifactsDirectory)'
+
+          - task: AzureWebApp@1
+            displayName: 'Deploy frontend to $(frontendAppName)'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(frontendAppName)'
+              package: '$(System.ArtifactsDirectory)/drop/site.zip'
+
+          - task: AzureAppServiceSettings@1
+            displayName: 'Configure frontend app settings and startup'
+            inputs:
+              azureSubscription: '$(azureServiceConnection)'
+              appName: '$(frontendAppName)'
+              resourceGroupName: '$(resourceGroupName)'
+              appSettings: |
+                [
+                  { "name": "WEBSITES_PORT", "value": "8000" },
+                  { "name": "SCM_DO_BUILD_DURING_DEPLOYMENT", "value": "1" },
+                  { "name": "API_BASE_URL", "value": "https://$(backendAppName).azurewebsites.net/api" }
+                ]
+              generalSettings: |
+                {
+                  "webFrameworkVersion": "",
+                  "linuxFxVersion": "PYTHON|3.11",
+                  "appCommandLine": "python -m pip install --upgrade pip && python -m pip install -r requirements.txt && waitress-serve --listen=0.0.0.0:8000 frontend.app:app"
+                } 

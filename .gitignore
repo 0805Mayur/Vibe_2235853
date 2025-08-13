@@ -7,3 +7,5 @@ my_env/
 logs/
 *.log
 .github_token
+config.py
+github_token.json
