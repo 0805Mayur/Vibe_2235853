@@ -650,13 +650,12 @@ def get_repositories_from_git(platform: str = "github", db: Session = Depends(ge
                 logger.error(f"GitHub REST fetch error: {rest_err}")
 
             # Fallback to SDK if REST path didn't return data
-            if git_service:
-                refresh_success = git_service.refresh_github_client(current_token)
-                if not refresh_success:
-                    logger.warning("⚠️ Failed to refresh GitHub SDK client")
-                else:
+            if not git_service:
                 logger.warning("⚠️ Git service not available; using fallback data")
                 return get_fallback_repositories(platform)
+            refresh_success = git_service.refresh_github_client(current_token)
+            if not refresh_success:
+                logger.warning("⚠️ Failed to refresh GitHub SDK client")
         
         # If no cached data, try Git service with short timeout
         if git_service:
